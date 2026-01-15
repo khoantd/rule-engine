@@ -27,7 +27,9 @@ MANIFEST
 venv/
 env/
 ENV/
-.venv
+.venv/
+venv.bak/
+env.bak/
 
 # IDE
 .vscode/
@@ -36,12 +38,26 @@ ENV/
 *.swo
 *~
 .DS_Store
+.cursor/
+*.sublime-project
+*.sublime-workspace
 
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
+.hypothesis/
+.pytest_cache/
+test-results/
+test_results_*.json
+*.cover
+.hypothesis/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 .hypothesis/
 
 # Configuration files with secrets
@@ -54,13 +70,16 @@ config/*.ini
 .env
 .env.local
 .env.*.local
+.env.*.backup
 
 # Logs
 *.log
 logs/
+*.log.*
 
 # AWS
 .aws/
+.aws-sam/
 
 # Secrets
 secrets/
@@ -68,32 +87,92 @@ secrets/
 *.key
 *.p12
 *.pfx
+*.crt
+*.csr
 
 # Data files (if sensitive)
 data/output/
 data/temp/
 *.tmp
+response.json
+test-event.json
 
 # Distribution / packaging
 *.zip
 *.tar.gz
 *.whl
+*.rar
+*.7z
 
 # Type checking
 .mypy_cache/
 .dmypy.json
 dmypy.json
+.pytype/
+.pyre/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb_checkpoints
 
 # pyenv
 .python-version
 
+# pyenv-virtualenv
+.python-version.backup
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
 # mypy
 .mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
 
 # Rule Engine specific
 rule_engine_lib.zip
 wow-rule-engine-deployment-package.zip
+
+# Docker
+.dockerignore
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+*.orig
+*.save
 
