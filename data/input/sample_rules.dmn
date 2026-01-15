@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmn:definitions xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/" 
+                 xmlns:feel="https://www.omg.org/spec/DMN/20191111/FEEL/" 
+                 id="sample-rules" 
+                 name="Sample Rules" 
+                 namespace="http://example.com/dmn">
+  
+  <dmn:decision id="DishDecision" name="Dish Decision">
+    <dmn:decisionTable id="DishTable" hitPolicy="UNIQUE">
+      <dmn:input id="SeasonInput" label="Season">
+        <dmn:inputExpression id="SeasonExpr" typeRef="string">
+          <feel:text>season</feel:text>
+        </dmn:inputExpression>
+      </dmn:input>
+      
+      <dmn:input id="GuestsInput" label="How many guests">
+        <dmn:inputExpression id="GuestsExpr" typeRef="number">
+          <feel:text>guests</feel:text>
+        </dmn:inputExpression>
+      </dmn:input>
+      
+      <dmn:output id="DishOutput" label="Dish" typeRef="string"/>
+      
+      <dmn:rule id="Rule1">
+        <dmn:inputEntry id="Rule1Season">
+          <feel:text>"Fall"</feel:text>
+        </dmn:inputEntry>
+        <dmn:inputEntry id="Rule1Guests">
+          <feel:text>&lt;= 8</feel:text>
+        </dmn:inputEntry>
+        <dmn:outputEntry id="Rule1Dish">
+          <feel:text>"Spareribs"</feel:text>
+        </dmn:outputEntry>
+      </dmn:rule>
+      
+      <dmn:rule id="Rule2">
+        <dmn:inputEntry id="Rule2Season">
+          <feel:text>"Winter"</feel:text>
+        </dmn:inputEntry>
+        <dmn:inputEntry id="Rule2Guests">
+          <feel:text>&lt;= 8</feel:text>
+        </dmn:inputEntry>
+        <dmn:outputEntry id="Rule2Dish">
+          <feel:text>"Roastbeef"</feel:text>
+        </dmn:outputEntry>
+      </dmn:rule>
+      
+      <dmn:rule id="Rule3">
+        <dmn:inputEntry id="Rule3Season">
+          <feel:text>"Spring"</feel:text>
+        </dmn:inputEntry>
+        <dmn:inputEntry id="Rule3Guests">
+          <feel:text>[5..8]</feel:text>
+        </dmn:inputEntry>
+        <dmn:outputEntry id="Rule3Dish">
+          <feel:text>"Steak"</feel:text>
+        </dmn:outputEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+  
+</dmn:definitions>

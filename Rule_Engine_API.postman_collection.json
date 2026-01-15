@@ -1,0 +1,1124 @@
+{
+	"info": {
+		"_postman_id": "rule-engine-api-collection",
+		"name": "Rule Engine API",
+		"description": "Complete API collection for Rule Engine service covering all endpoints including rule execution, workflow execution, DMN operations, and management APIs.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "rule-engine"
+	},
+	"item": [
+		{
+			"name": "Health & Info",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Check the health status of the API service."
+					},
+					"response": []
+				},
+				{
+					"name": "Root Endpoint",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Root endpoint that provides API information."
+					},
+					"response": []
+				}
+			],
+			"description": "Health check and API information endpoints"
+		},
+		{
+			"name": "Rules Execution",
+			"item": [
+				{
+					"name": "Execute Rules",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": false,\n  \"correlation_id\": \"req-12345\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute"
+							]
+						},
+						"description": "Execute business rules against input data and return scoring results with action recommendations."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute Rules (Dry Run)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-dry-run-001\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute"
+							]
+						},
+						"description": "Execute rules in dry run mode to see detailed rule evaluations without side effects."
+					},
+					"response": []
+				},
+				{
+					"name": "Batch Execute Rules",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data_list\": [\n    {\n      \"issue\": 35,\n      \"title\": \"Superman\",\n      \"publisher\": \"DC\"\n    },\n    {\n      \"issue\": 10,\n      \"title\": \"Batman\",\n      \"publisher\": \"DC\"\n    },\n    {\n      \"issue\": 1,\n      \"title\": \"Spider-Man\",\n      \"publisher\": \"Marvel\"\n    }\n  ],\n  \"dry_run\": false,\n  \"max_workers\": 4,\n  \"correlation_id\": \"batch-12345\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"batch"
+							]
+						},
+						"description": "Execute rules against multiple input data items in parallel for efficient batch processing."
+					},
+					"response": []
+				}
+			],
+			"description": "Rule execution endpoints for single and batch operations"
+		},
+		{
+			"name": "DMN Rules Execution",
+			"item": [
+				{
+					"name": "Execute DMN Rules (File Path)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"dmn_file\": \"data/input/sample_rules.dmn\",\n  \"data\": {\n    \"season\": \"Fall\",\n    \"guests\": 6\n  },\n  \"dry_run\": false,\n  \"correlation_id\": \"req-dmn-001\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute-dmn",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute-dmn"
+							]
+						},
+						"description": "Execute business rules from a DMN file (via file path) against input data."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute DMN Rules (XML Content)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"dmn_content\": \"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?><dmn:definitions xmlns:dmn=\\\"https://www.omg.org/spec/DMN/20191111/MODEL/\\\" xmlns:feel=\\\"https://www.omg.org/spec/DMN/20191111/FEEL/\\\" id=\\\"sample-rules\\\" name=\\\"Sample Rules\\\"><dmn:decision id=\\\"DishDecision\\\" name=\\\"Dish Decision\\\"><dmn:decisionTable id=\\\"DishTable\\\" hitPolicy=\\\"UNIQUE\\\"><dmn:input id=\\\"SeasonInput\\\" label=\\\"Season\\\"><dmn:inputExpression id=\\\"SeasonExpr\\\" typeRef=\\\"string\\\"><feel:text>season</feel:text></dmn:inputExpression></dmn:input><dmn:output id=\\\"DishOutput\\\" label=\\\"Dish\\\" typeRef=\\\"string\\\"/><dmn:rule id=\\\"Rule1\\\"><dmn:inputEntry id=\\\"Rule1Season\\\"><feel:text>\\\"Winter\\\"</feel:text></dmn:inputEntry><dmn:outputEntry id=\\\"Rule1Dish\\\"><feel:text>\\\"Roastbeef\\\"</feel:text></dmn:outputEntry></dmn:rule></dmn:decisionTable></dmn:decision></dmn:definitions>\",\n  \"data\": {\n    \"season\": \"Winter\",\n    \"guests\": 5\n  },\n  \"dry_run\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute-dmn",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute-dmn"
+							]
+						},
+						"description": "Execute business rules from DMN XML content against input data."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute DMN Rules (File Upload)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "DMN XML file (.dmn extension)"
+								},
+								{
+									"key": "data",
+									"value": "{\"season\": \"Spring\", \"guests\": 7}",
+									"type": "text",
+									"description": "JSON string containing input data"
+								},
+								{
+									"key": "dry_run",
+									"value": "false",
+									"type": "text",
+									"description": "Execute rules without side effects"
+								},
+								{
+									"key": "correlation_id",
+									"value": "req-dmn-upload-001",
+									"type": "text",
+									"description": "Correlation ID for request tracing"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute-dmn-upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute-dmn-upload"
+							]
+						},
+						"description": "Execute business rules from an uploaded DMN file against input data."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute DMN Rules (Dry Run)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"dmn_file\": \"data/input/sample_rules.dmn\",\n  \"data\": {\n    \"season\": \"Fall\",\n    \"guests\": 6\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-dmn-dry-run-001\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute-dmn",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute-dmn"
+							]
+						},
+						"description": "Execute DMN rules in dry run mode to see detailed rule evaluations."
+					},
+					"response": []
+				}
+			],
+			"description": "DMN (Decision Model Notation) rule execution endpoints"
+		},
+		{
+			"name": "Workflow Execution",
+			"item": [
+				{
+					"name": "Execute Workflow",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"process_name\": \"ticket_processing\",\n  \"stages\": [\"NEW\", \"INPROGESS\", \"FINISHED\"],\n  \"data\": {\n    \"ticket_id\": \"TICK-123\",\n    \"title\": \"Issue Report\",\n    \"priority\": \"high\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflow/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflow",
+								"execute"
+							]
+						},
+						"description": "Execute a multi-stage workflow with the provided process name, stages, and input data."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute Workflow (Default Stages)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"process_name\": \"process_1\",\n  \"stages\": [],\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"John\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflow/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflow",
+								"execute"
+							]
+						},
+						"description": "Execute workflow with default stages (INITIATED, NEW, INPROGESS, FINISHED)."
+					},
+					"response": []
+				}
+			],
+			"description": "Workflow execution endpoints"
+		},
+		{
+			"name": "DMN Upload",
+			"item": [
+				{
+					"name": "Upload and Parse DMN File",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "DMN XML file (.dmn extension)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/dmn/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"dmn",
+								"upload"
+							]
+						},
+						"description": "Upload a DMN (Decision Model Notation) XML file and convert it to the rule engine's internal rule format."
+					},
+					"response": []
+				}
+			],
+			"description": "DMN file upload and parsing endpoints"
+		},
+		{
+			"name": "Rules Management",
+			"item": [
+				{
+					"name": "List All Rules",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rules",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rules"
+							]
+						},
+						"description": "Retrieve a list of all configured rules."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Rule by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rules/R0001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rules",
+								"R0001"
+							]
+						},
+						"description": "Retrieve a specific rule by its identifier."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"R9999\",\n  \"rule_name\": \"Test Rule\",\n  \"type\": \"simple\",\n  \"conditions\": {\n    \"item\": \"C0001\"\n  },\n  \"description\": \"Test rule description\",\n  \"result\": \"Y\",\n  \"weight\": 1.0,\n  \"rule_point\": 10.0,\n  \"priority\": 1,\n  \"action_result\": \"Y\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rules",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rules"
+							]
+						},
+						"description": "Create a new rule with the provided configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Rule",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"rule_name\": \"Updated Rule Name\",\n  \"description\": \"Updated description\",\n  \"weight\": 1.5,\n  \"rule_point\": 15.0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rules/R0001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rules",
+								"R0001"
+							]
+						},
+						"description": "Update an existing rule with new configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Rule",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rules/R0001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rules",
+								"R0001"
+							]
+						},
+						"description": "Delete a rule by its identifier."
+					},
+					"response": []
+				}
+			],
+			"description": "CRUD operations for Rules management"
+		},
+		{
+			"name": "Conditions Management",
+			"item": [
+				{
+					"name": "List All Conditions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/conditions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"conditions"
+							]
+						},
+						"description": "Retrieve a list of all configured conditions."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Condition by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/conditions/C0001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"conditions",
+								"C0001"
+							]
+						},
+						"description": "Retrieve a specific condition by its identifier."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Condition",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"condition_id\": \"C9999\",\n  \"attribute\": \"issue\",\n  \"equation\": \"greater_than\",\n  \"constant\": \"30\",\n  \"message\": \"Issue number is greater than 30\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/conditions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"conditions"
+							]
+						},
+						"description": "Create a new condition with the provided configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Condition",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"attribute\": \"issue\",\n  \"equation\": \"greater_than_or_equal\",\n  \"constant\": \"35\",\n  \"message\": \"Updated message\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/conditions/C0001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"conditions",
+								"C0001"
+							]
+						},
+						"description": "Update an existing condition with new configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Condition",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/conditions/C0001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"conditions",
+								"C0001"
+							]
+						},
+						"description": "Delete a condition by its identifier."
+					},
+					"response": []
+				}
+			],
+			"description": "CRUD operations for Conditions management"
+		},
+		{
+			"name": "Actions Management",
+			"item": [
+				{
+					"name": "List All Actions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/actions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"actions"
+							]
+						},
+						"description": "Retrieve a list of all configured actions/patterns."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Action by Pattern",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/actions/YYY",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"actions",
+								"YYY"
+							]
+						},
+						"description": "Retrieve a specific action by its pattern string."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Action",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"pattern\": \"NNN\",\n  \"message\": \"Not Approved\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/actions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"actions"
+							]
+						},
+						"description": "Create a new action/pattern with the provided configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Action",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"Updated action message\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/actions/YYY",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"actions",
+								"YYY"
+							]
+						},
+						"description": "Update an existing action/pattern with a new message."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Action",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/actions/YYY",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"actions",
+								"YYY"
+							]
+						},
+						"description": "Delete an action/pattern by its pattern string."
+					},
+					"response": []
+				}
+			],
+			"description": "CRUD operations for Actions/Patterns management"
+		},
+		{
+			"name": "Rulesets Management",
+			"item": [
+				{
+					"name": "List All Rulesets",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rulesets",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rulesets"
+							]
+						},
+						"description": "Retrieve a list of all configured rulesets."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Ruleset by Name",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rulesets/default_ruleset",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rulesets",
+								"default_ruleset"
+							]
+						},
+						"description": "Retrieve a specific ruleset by its name."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Ruleset",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ruleset_name\": \"test_ruleset\",\n  \"rules\": [\n    {\n      \"id\": \"R0001\",\n      \"rule_name\": \"Rule 1\",\n      \"type\": \"simple\",\n      \"conditions\": {\n        \"item\": \"C0001\"\n      },\n      \"result\": \"Y\",\n      \"weight\": 1.0,\n      \"rule_point\": 10.0,\n      \"priority\": 1,\n      \"action_result\": \"Y\"\n    }\n  ],\n  \"patterns\": {\n    \"YYY\": \"Approved\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rulesets",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rulesets"
+							]
+						},
+						"description": "Create a new ruleset with the provided configuration. Note: RuleSets are logical groupings and validation only."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Ruleset",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"rules\": [\n    {\n      \"id\": \"R0001\",\n      \"rule_name\": \"Updated Rule 1\",\n      \"type\": \"simple\",\n      \"conditions\": {\n        \"item\": \"C0001\"\n      },\n      \"result\": \"Y\",\n      \"weight\": 1.5,\n      \"rule_point\": 15.0,\n      \"priority\": 1,\n      \"action_result\": \"Y\"\n    }\n  ],\n  \"patterns\": {\n    \"YYY\": \"Approved\",\n    \"YNY\": \"Conditionally Approved\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rulesets/default_ruleset",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rulesets",
+								"default_ruleset"
+							]
+						},
+						"description": "Update an existing ruleset with new configuration. Note: RuleSets are logical groupings and validation only."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Ruleset",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/rulesets/default_ruleset",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"rulesets",
+								"default_ruleset"
+							]
+						},
+						"description": "Delete a ruleset by its name. Note: This is a logical operation that validates the deletion."
+					},
+					"response": []
+				}
+			],
+			"description": "CRUD operations for Rulesets management"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "api_key",
+			"value": "your-api-key-here",
+			"type": "string",
+			"disabled": true
+		}
+	]
+}

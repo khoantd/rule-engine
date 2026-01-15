@@ -1,0 +1,48 @@
+{
+  "rules_set_name": "Rule Set 1",
+  "rules_set_details": [
+    {
+      "id": "R1",
+      "rule_name": "Rule 1",
+      "condition_id": "C0001",
+      "message": "the issue is greater than 30",
+      "weight": 30,
+      "priority": 1,
+      "action": "Y"
+    },
+    {
+      "id": "R2",
+      "rule_name": "Rule 2",
+      "condition_id": "C0002",
+      "message": "the issue is less than 10",
+      "weight": 20,
+      "priority": 2,
+      "action": "Y"
+    },
+    {
+      "id": "R3",
+      "rule_name": "Rule 3",
+      "condition_id": "C0003",
+      "message": "the issue is less than 20",
+      "weight": 5,
+      "priority": 3,
+      "action": "Y"
+    },
+    {
+      "id": "R4",
+      "rule_name": "Rule 4",
+      "condition_id": "C0004",
+      "message": "the issue is less than 40",
+      "weight": 5,
+      "priority": 3,
+      "action": "Y"
+    }
+  ],
+  "patterns": {
+    "YYYY": "Approved",
+    "Y---": "Rejected",
+    "YY--": "Reviewed",
+    "YY-Y": "Reviewed",
+    "YYY-": "Reviewed"
+  }
+}

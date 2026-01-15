@@ -1,0 +1,32 @@
+# Development and testing dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Testing framework
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-asyncio==0.21.1
+pytest-xdist==3.5.0  # For parallel test execution
+
+# Code coverage
+coverage==7.3.4
+
+# Test utilities
+freezegun==1.2.2  # For time mocking
+responses==0.24.1  # For HTTP mocking
+moto==4.2.14  # For AWS mocking (boto3)
+
+# Code quality tools
+pylint==3.0.2
+flake8==6.1.0
+black==23.12.1
+mypy==1.7.1
+ruff==0.1.9
+
+# Type stubs
+types-requests==2.31.0.20240106
+
+# Documentation
+sphinx==7.2.6
+sphinx-rtd-theme==2.0.0
+

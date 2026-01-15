@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configuration Guide &mdash; Rule Engine 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/documentation_options.js?v=8d563738"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Usage Examples" href="examples.html" />
+    <link rel="prev" title="API Reference" href="api/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Rule Engine
+          </a>
+              <div class="version">
+                1.0.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/index.html">API Reference</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Configuration Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#rule-configuration">Rule Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration-structure">Configuration Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rule-fields">Rule Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pattern-fields">Pattern Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#condition-operators">Condition Operators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#environment-configuration">Environment Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration-sources">Configuration Sources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-s3-configuration">Using S3 Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration-caching">Configuration Caching</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reloading-configuration">Reloading Configuration</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="examples.html">Usage Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Rule Engine</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Configuration Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/configuration.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="configuration-guide">
+<h1>Configuration Guide<a class="headerlink" href="#configuration-guide" title="Link to this heading">¶</a></h1>
+<p>The Rule Engine uses JSON configuration files to define rules and patterns.</p>
+<section id="rule-configuration">
+<h2>Rule Configuration<a class="headerlink" href="#rule-configuration" title="Link to this heading">¶</a></h2>
+<p>Rules are defined in JSON format. The default location is
+<code class="docutils literal notranslate"><span class="pre">data/input/rules_config.json</span></code> (or <code class="docutils literal notranslate"><span class="pre">rules_config_v4.json</span></code>).</p>
+</section>
+<section id="configuration-structure">
+<h2>Configuration Structure<a class="headerlink" href="#configuration-structure" title="Link to this heading">¶</a></h2>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;rules_set&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;R0001&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;rule_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Rule 1&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;attribute&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;issue&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;condition&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;greater_than&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;constant&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;30&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;the issue is greater than 30&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;weight&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">30</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;rule_point&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;priority&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;action_result&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Y&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;patterns&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;YYY&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Approved&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;Y--&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Rejected&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;YY-&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Reviewed&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="rule-fields">
+<h2>Rule Fields<a class="headerlink" href="#rule-fields" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>id</strong>: Unique rule identifier</p></li>
+<li><p><strong>rule_name</strong>: Human-readable rule name</p></li>
+<li><p><strong>attribute</strong>: Data attribute to evaluate</p></li>
+<li><p><strong>condition</strong>: Condition operator (see supported operators below)</p></li>
+<li><p><strong>constant</strong>: Constant value for comparison</p></li>
+<li><p><strong>weight</strong>: Weight multiplier for scoring</p></li>
+<li><p><strong>rule_point</strong>: Base points awarded when rule matches</p></li>
+<li><p><strong>priority</strong>: Execution priority (lower = higher priority)</p></li>
+<li><p><strong>action_result</strong>: Result character (e.g., “Y”, “N”, “-“)</p></li>
+</ul>
+</section>
+<section id="pattern-fields">
+<h2>Pattern Fields<a class="headerlink" href="#pattern-fields" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>Keys</strong>: Pattern strings (e.g., “YYY”, “Y–“)</p></li>
+<li><p><strong>Values</strong>: Action recommendations (e.g., “Approved”, “Rejected”)</p></li>
+</ul>
+</section>
+<section id="condition-operators">
+<h2>Condition Operators<a class="headerlink" href="#condition-operators" title="Link to this heading">¶</a></h2>
+<p>Supported condition operators:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">equal</span></code>: Equality check (==)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">not_equal</span></code>: Inequality check (!=)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">greater_than</span></code>: Greater than (&gt;)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">greater_than_or_equal</span></code>: Greater than or equal (&gt;=)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">less_than</span></code>: Less than (&lt;)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">less_than_or_equal</span></code>: Less than or equal (&lt;=)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">in</span></code>: Membership check (in)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">not_in</span></code>: Non-membership check (not in)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">range</span></code>: Range check (in [list])</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">contains</span></code>: String contains</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">regex</span></code>: Regular expression match</p></li>
+</ul>
+</section>
+<section id="environment-configuration">
+<h2>Environment Configuration<a class="headerlink" href="#environment-configuration" title="Link to this heading">¶</a></h2>
+<p>Configuration can be overridden via environment variables:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Configuration file paths</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">RULES_CONFIG_PATH</span><span class="o">=</span>data/input/rules_config_v4.json
+<span class="nb">export</span><span class="w"> </span><span class="nv">CONDITIONS_CONFIG_PATH</span><span class="o">=</span>data/input/conditions_config.json
+
+<span class="c1"># AWS Configuration</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">AWS_REGION</span><span class="o">=</span>us-east-1
+<span class="nb">export</span><span class="w"> </span><span class="nv">S3_BUCKET</span><span class="o">=</span>my-config-bucket
+<span class="nb">export</span><span class="w"> </span><span class="nv">S3_CONFIG_PREFIX</span><span class="o">=</span>config/
+
+<span class="c1"># Environment</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">ENVIRONMENT</span><span class="o">=</span>production
+</pre></div>
+</div>
+</section>
+<section id="configuration-sources">
+<h2>Configuration Sources<a class="headerlink" href="#configuration-sources" title="Link to this heading">¶</a></h2>
+<p>The engine supports multiple configuration sources:</p>
+<ol class="arabic simple">
+<li><p><strong>Local Files</strong>: Default configuration from <code class="docutils literal notranslate"><span class="pre">data/input/</span></code></p></li>
+<li><p><strong>AWS S3</strong>: Load configurations from S3 buckets</p></li>
+<li><p><strong>Environment Variables</strong>: Override specific settings</p></li>
+</ol>
+</section>
+<section id="using-s3-configuration">
+<h2>Using S3 Configuration<a class="headerlink" href="#using-s3-configuration" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">common.s3_aws_util</span><span class="w"> </span><span class="kn">import</span> <span class="n">aws_s3_config_file_read</span>
+
+<span class="c1"># Read from S3</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">aws_s3_config_file_read</span><span class="p">(</span>
+    <span class="n">bucket</span><span class="o">=</span><span class="s1">&#39;my-config-bucket&#39;</span><span class="p">,</span>
+    <span class="n">key</span><span class="o">=</span><span class="s1">&#39;config/rules_config.json&#39;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="configuration-caching">
+<h2>Configuration Caching<a class="headerlink" href="#configuration-caching" title="Link to this heading">¶</a></h2>
+<p>Configuration is automatically cached for performance:</p>
+<ul class="simple">
+<li><p>Rules configuration is cached after first load</p></li>
+<li><p>Conditions configuration is cached</p></li>
+<li><p>Actions/patterns configuration is cached</p></li>
+</ul>
+</section>
+<section id="reloading-configuration">
+<h2>Reloading Configuration<a class="headerlink" href="#reloading-configuration" title="Link to this heading">¶</a></h2>
+<p>To force reload configuration:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">common.config_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_config_loader</span>
+
+<span class="n">config_loader</span> <span class="o">=</span> <span class="n">get_config_loader</span><span class="p">()</span>
+<span class="n">config_loader</span><span class="o">.</span><span class="n">clear_cache</span><span class="p">()</span>  <span class="c1"># Clear cache</span>
+<span class="n">rules</span> <span class="o">=</span> <span class="n">config_loader</span><span class="o">.</span><span class="n">load_rules_set</span><span class="p">()</span>  <span class="c1"># Reload</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="api/index.html" class="btn btn-neutral float-left" title="API Reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="examples.html" class="btn btn-neutral float-right" title="Usage Examples" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Rule Engine Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

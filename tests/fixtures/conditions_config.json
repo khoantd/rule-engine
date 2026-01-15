@@ -1,0 +1,26 @@
+{
+  "conditions_set": [
+    {
+      "condition_id": "C0001",
+      "condition_name": "Condition 1",
+      "attribute": "status",
+      "equation": "equal",
+      "constant": "open"
+    },
+    {
+      "condition_id": "C0002",
+      "condition_name": "Condition 2",
+      "attribute": "priority",
+      "equation": "greater_than",
+      "constant": "10"
+    },
+    {
+      "condition_id": "C0003",
+      "condition_name": "Condition 3",
+      "attribute": "type",
+      "equation": "range",
+      "constant": ["bug", "feature"]
+    }
+  ]
+}
+

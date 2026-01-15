@@ -1,0 +1,54 @@
+{
+  "rules_set": [
+    {
+      "id": "R0001",
+      "rule_name": "Rule 1",
+      "type": "simple",
+      "conditions": {
+        "item": "C0004"
+      },
+      "description": "Age of Change Request is greater than 90 days since creation date",
+      "result": "Y",
+      "weight": 0.1,
+      "rule_point": 20,
+      "priority": 1,
+      "action_result": "Y"
+    },
+    {
+      "id": "R0002",
+      "rule_name": "Rule 2",
+      "type": "complex",
+      "conditions": {
+        "mode": "inclusive",
+        "items": ["C0009", "C0013"]
+      },
+      "description": "Age of Change Request is greater than 30 days since starting UAT testing",
+      "result": "Y",
+      "weight": 0.15,
+      "rule_point": 10,
+      "priority": 1,
+      "action_result": "Y"
+    },
+    {
+      "id": "R0003",
+      "rule_name": "Rule 3",
+      "type": "complex",
+      "conditions": {
+        "mode": "inclusive",
+        "items": ["C0011", "C0012"]
+      },
+      "description": "Age of Change Request is greater than 10 days since BOMC's Approval [approved,3]",
+      "result": "Y",
+      "weight": 0.1,
+      "rule_point": 10,
+      "priority": 1,
+      "action_result": "Y"
+    }
+  ],
+  "patterns": {
+    "Y--": "Need to clear backlog",
+    "--Y": "Need to follow up with internal team",
+    "-Y-": "Need to follow up with business user",
+    "---": "Not defined action"
+  }
+}

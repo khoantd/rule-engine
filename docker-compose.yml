@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  rule-engine-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rule-engine:latest
+    container_name: rule-engine-api
+    ports:
+      - "8000:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - API_WORKERS=1
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - API_KEY_ENABLED=${API_KEY_ENABLED:-false}
+      - API_KEY=${API_KEY:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      # AWS Configuration (optional)
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_CONFIG_PREFIX=${S3_CONFIG_PREFIX:-config/}
+      # Configuration file paths
+      - RULES_CONFIG_PATH=${RULES_CONFIG_PATH:-data/input/rules_config_v4.json}
+      - CONDITIONS_CONFIG_PATH=${CONDITIONS_CONFIG_PATH:-data/input/conditions_config.json}
+    volumes:
+      # Mount data directory for configuration files
+      - ./data:/app/data:ro
+      # Mount config directory (optional, if you need to override config)
+      - ./config:/app/config:ro
+      # Mount logs directory (optional, for log persistence)
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - rule-engine-network
+
+networks:
+  rule-engine-network:
+    driver: bridge
+

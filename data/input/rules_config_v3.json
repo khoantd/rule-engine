@@ -1,0 +1,52 @@
+{
+  "rules_set": [
+    {
+      "id": "R0001",
+      "rule_name": "Rule 1",
+      "type": "standard",
+      "attribute": "age_till_now",
+      "condition": "greater_than",
+      "constant": 90,
+      "message": "Age of Change Request is greater than 90 days since creation date",
+      "weight": 30,
+      "rule_point": 20,
+      "priority": 1,
+      "action_result": "Y"
+    },
+    {
+      "id": "R0002",
+      "rule_name": "Rule 2",
+      "type": "standard",
+      "attribute": "days_since_starting_uat",
+      "condition": "greater_than",
+      "constant": 30,
+      "message": "Age of Change Request is greater than 30 days since starting UAT testing",
+      "weight": 20,
+      "rule_point": 15,
+      "priority": 2,
+      "action_result": "Y"
+    },
+    {
+      "id": "R0003",
+      "rule_name": "Rule 3",
+      "type": "standard",
+      "attribute": "days_since_bomc_approval",
+      "condition": "greater_than",
+      "constant": 10,
+      "message": "Age of Change Request is greater than 10 days since BOMC's Approval",
+      "weight": 5,
+      "rule_point": 10,
+      "priority": 3,
+      "action_result": "Y"
+    }
+  ],
+  "patterns": {
+    "YYY": "Need To Observe Closely",
+    "--Y": "Need To Have A Plan For Implementation",
+    "YY-": "Need To Starting Followup",
+    "Y-Y": "Need To Starting Followup",
+    "-YY": "Need To Starting Followup",
+    "Y--": "Need To Starting Followup",
+    "---": "No Actions Required"
+  }
+}

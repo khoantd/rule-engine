@@ -1,0 +1,405 @@
+# Rule Engine - Cursor Rules
+
+## Project Overview
+This is a Python rule engine project for evaluating business rules and workflows. The codebase follows a layered architecture with clear separation of concerns.
+
+## Core Principles
+- **Preserve working code**: Do not break existing functionality. Enhance things carefully. Fix things carefully.
+- **Maintain code quality**: Follow established patterns and conventions.
+- **Type safety**: Add type hints to all public functions and methods.
+- **Test coverage**: Maintain 80%+ test coverage, aim for 90%+ on new code.
+- **Structured logging**: Use `common.logger` instead of print statements.
+
+## Architecture Guidelines
+
+### Directory Structure
+- `common/`: Shared utilities (logging, exceptions, config, DI)
+- `domain/`: Business logic and domain models (rules, actions, conditions, handlers)
+- `services/`: High-level services (ruleengine_exec, workflow_exec)
+- `api/`: API layer with routes and middleware
+- `tests/`: Test suite (unit, integration)
+- `config/`: Configuration files
+- `data/`: Data files and rule configurations
+
+### Layer Separation
+- Domain layer should not depend on services or infrastructure
+- Services layer orchestrates domain logic
+- Common utilities are shared across all layers
+- Keep concerns separated - don't mix configuration, execution, and domain logic
+
+## Code Style & Standards
+
+### Python Version
+- Target Python 3.8+
+- Use type hints compatible with Python 3.8
+
+### Code Formatting
+- Use Black with 100 character line length (configured in pyproject.toml)
+- Format code before committing
+- Follow PEP 8 with project-specific overrides
+
+### Import Organization
+```python
+# 1. Standard library imports
+import json
+from typing import Dict, Any, List
+
+# 2. Third-party imports
+from rule_engine import Rule
+
+# 3. Local imports
+from common.logger import get_logger
+from common.exceptions import RuleEvaluationError
+```
+
+**CRITICAL**: Avoid wildcard imports (`from module import *`). Always use explicit imports.
+
+### Type Hints
+All public functions must have type hints:
+```python
+def rules_exec(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute rules against input data."""
+    pass
+```
+
+### Naming Conventions
+- Functions: `snake_case` (e.g., `rules_exec`, `validate_input`)
+- Classes: `PascalCase` (e.g., `RuleEvaluationError`, `ConfigLoader`)
+- Constants: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`, `DEFAULT_TIMEOUT`)
+- Private: Prefix with `_` (e.g., `_internal_helper`)
+
+## Error Handling
+
+### Custom Exceptions
+Always use custom exceptions from `common.exceptions`:
+- `DataValidationError`: Invalid input data
+- `ConfigurationError`: Configuration loading issues
+- `RuleEvaluationError`: Rule execution failures
+- `WorkflowError`: Workflow execution failures
+
+```python
+from common.exceptions import DataValidationError
+
+if not data:
+    raise DataValidationError("Input data cannot be None", error_code="DATA_NONE")
+```
+
+### Exception Handling Best Practices
+- Never use bare `except:` clauses
+- Catch specific exceptions first, then general
+- Log errors with context before raising
+- Preserve exception chain with `from e`
+
+## Logging
+
+### Structured Logging
+Use `common.logger.get_logger()` for all logging:
+```python
+from common.logger import get_logger
+
+logger = get_logger(__name__)
+logger.info("Processing rule", rule_id=rule_id, priority=priority)
+logger.error("Rule evaluation failed", rule_id=rule_id, exc_info=True)
+```
+
+**CRITICAL**: Never use `print()` statements. Replace all print statements with proper logging.
+
+### Log Levels
+- `DEBUG`: Detailed information for debugging
+- `INFO`: General informational messages
+- `WARNING`: Warning messages (e.g., deprecated usage)
+- `ERROR`: Error messages that need attention
+- `CRITICAL`: Critical errors requiring immediate action
+
+## Testing Requirements
+
+### Test Organization
+- Unit tests: `tests/unit/` - fast, isolated, mocked dependencies
+- Integration tests: `tests/integration/` - test component interactions
+- Use pytest markers: `@pytest.mark.unit`, `@pytest.mark.integration`
+
+### Test Naming
+```python
+def test_rules_exec_with_valid_data(self):
+    """Test rule execution with valid input data."""
+    pass
+
+def test_rules_exec_raises_error_with_invalid_data(self):
+    """Test rule execution raises error with invalid data."""
+    pass
+```
+
+### Coverage Requirements
+- Minimum: 80% overall
+- New code: 90%+ coverage
+- Critical paths: 100% coverage
+
+### Test Structure
+```python
+import pytest
+from services.ruleengine_exec import rules_exec
+from common.exceptions import DataValidationError
+
+class TestRulesExec:
+    """Test suite for rules_exec function."""
+    
+    def test_rules_exec_with_valid_data(self):
+        """Test rule execution with valid input data."""
+        data = {'issue': 35, 'title': 'Superman'}
+        result = rules_exec(data)
+        
+        assert 'total_points' in result
+        assert 'pattern_result' in result
+```
+
+## Documentation Standards
+
+### Docstrings
+Use Google-style docstrings for all public functions:
+```python
+def rules_exec(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Execute rules against input data.
+    
+    Args:
+        data: Dictionary containing input data for rule evaluation
+        
+    Returns:
+        Dictionary containing:
+            - total_points: Sum of rule points
+            - pattern_result: Concatenated action results
+            - action_recommendation: Recommended action
+            
+    Raises:
+        DataValidationError: If input data is invalid
+        ConfigurationError: If configuration cannot be loaded
+        RuleEvaluationError: If rule evaluation fails
+        
+    Example:
+        >>> data = {'issue': 35, 'title': 'Superman'}
+        >>> result = rules_exec(data)
+        >>> result['total_points']
+        1050.0
+    """
+    pass
+```
+
+## Code Quality Guidelines
+
+### Removing Dead Code
+- Remove commented-out code blocks
+- Delete unused imports (use linter to identify)
+- Remove unused variables
+- Empty functions should be implemented or removed
+
+### Code Organization
+- One module per file
+- Keep related functionality together
+- Follow DRY (Don't Repeat Yourself) principle
+- Single Responsibility Principle for functions/classes
+
+### Configuration Management
+- Use `common/config.py` for centralized configuration
+- Use environment variables for environment-specific settings
+- Don't hard-code configuration values
+- Use configuration repository pattern for multiple sources
+
+### Security
+- Use context managers (`with` statements) for file operations
+- Validate file paths to prevent directory traversal
+- Never hard-code credentials or secrets
+- Use `common/secrets_manager.py` for secret management
+
+## Specific Project Patterns
+
+### Rule Execution Pattern
+```python
+from services.ruleengine_exec import rules_exec
+
+result = rules_exec(data, dry_run=False)
+# Returns: {'total_points': float, 'pattern_result': str, 'action_recommendation': str}
+
+# With dry_run=True for detailed evaluation
+result = rules_exec(data, dry_run=True)
+# Returns: {
+#     'total_points': float,
+#     'pattern_result': str,
+#     'action_recommendation': str,
+#     'rule_evaluations': List[Dict],  # All evaluated rules
+#     'would_match': List[Dict],        # Rules that matched
+#     'would_not_match': List[Dict],   # Rules that didn't match
+#     'dry_run': True
+# }
+```
+
+### Workflow Execution Pattern
+```python
+from services.workflow_exec import wf_exec
+
+result = wf_exec(
+    process_name='process_1',
+    ls_stages=['NEW', 'INPROGESS', 'FINISHED'],
+    data={'id': 1, 'name': 'John'}
+)
+```
+
+### Configuration Loading
+```python
+from common.config_loader import rules_set_cfg_read
+from common.repository.config_repository import ConfigRepository
+
+# Use cached configuration loader
+rules = rules_set_cfg_read()
+
+# Or use repository pattern for flexible sources
+repo = ConfigRepository()
+config = repo.load_rules_config()
+```
+
+### Dependency Injection
+```python
+from common.di.container import Container
+from common.di.factory import create_handler
+
+# Use DI container for testability
+container = Container()
+handler = container.get('workflow_handler')
+```
+
+### DMN Rules Execution Pattern
+```python
+from services.ruleengine_exec import dmn_rules_exec
+
+# Execute DMN rules from file
+result = dmn_rules_exec(
+    dmn_file='data/input/sample_rules.dmn',
+    data={'can': 'binh', 'chi': 'ty'},
+    dry_run=True,
+    correlation_id='req-001'
+)
+# Returns: {
+#     'total_points': float,
+#     'pattern_result': str,
+#     'action_recommendation': str,
+#     'decision_outputs': Dict[str, Any],  # Mapped decision outputs
+#     'rule_evaluations': List[Dict],      # All evaluated rules (dry_run only)
+#     'would_match': List[Dict],           # Rules that matched (dry_run only)
+#     'would_not_match': List[Dict],       # Rules that didn't match (dry_run only)
+#     'dry_run': True
+# }
+
+# Or from XML content
+result = dmn_rules_exec(
+    dmn_content='<definitions>...</definitions>',
+    data={'field': 'value'},
+    dry_run=False
+)
+```
+
+### DMN Execution with Dependency Ordering
+- DMN decisions are executed in dependency order (determined by `informationRequirement`)
+- Each decision's outputs are mapped to input field names and added to data context
+- Dependent decisions can use outputs from previous decisions
+- Hit policies (UNIQUE/FIRST) stop evaluation after first match
+- **CRITICAL**: When tracking rule evaluations in dry-run mode, always add evaluation BEFORE breaking on hit policy
+
+## When Making Changes
+
+### Before Changing Code
+1. Understand the existing code structure
+2. Check if similar functionality exists elsewhere
+3. Review related tests
+4. Check CODE_QUALITY_BACKLOG.md for related issues
+
+### During Changes
+1. Maintain backward compatibility when possible
+2. Add type hints to new/modified functions
+3. Add/update docstrings
+4. Update tests to cover new functionality
+5. Run linters and fix issues
+6. Replace print() with proper logging
+7. When modifying rule evaluation loops with hit policies, ensure rule evaluation tracking happens before any break statements
+8. For DMN execution, verify that decision outputs are properly mapped and added to data context for dependent decisions
+
+### After Changes
+1. Run tests: `pytest`
+2. Check coverage: `pytest --cov=. --cov-report=html`
+3. Run linters: `flake8 .`, `pylint .`, `mypy .`
+4. Format code: `black .`
+5. Update documentation if needed
+
+## Code Review Checklist
+- [ ] Type hints added
+- [ ] Docstrings added/updated
+- [ ] Tests added/updated (90%+ coverage)
+- [ ] No print() statements (use logger)
+- [ ] No wildcard imports
+- [ ] No bare except clauses
+- [ ] Uses custom exceptions appropriately
+- [ ] Follows project structure
+- [ ] No hard-coded values
+- [ ] Logging added for critical operations
+- [ ] Error handling is appropriate
+- [ ] Code formatted with Black
+- [ ] Rule evaluation tracking happens before break statements (for hit policies)
+- [ ] DMN decision outputs are properly mapped and added to data context
+- [ ] Dry-run mode correctly populates `rule_evaluations`, `would_match`, and `would_not_match`
+
+## Tools & Commands
+
+### Development
+```bash
+# Run tests
+pytest
+pytest -m unit
+pytest --cov=. --cov-report=html
+
+# Linting
+flake8 .
+pylint .
+mypy .
+
+# Formatting
+black .
+
+# Type checking
+mypy .
+```
+
+### Configuration
+- `pyproject.toml`: Project configuration, tool settings
+- `pytest.ini`: Pytest configuration
+- `mypy.ini`: Type checking configuration
+
+## Known Issues to Address
+Refer to `CODE_QUALITY_BACKLOG.md` for:
+- P0 (Critical) issues that need immediate attention
+- P1 (High) priority improvements
+- Code quality improvement suggestions
+
+**Priority areas**:
+- Replace all print() statements with logging
+- Replace bare except clauses
+- Add error handling to S3/JSON operations
+- Remove wildcard imports
+- Add type hints throughout
+- Remove commented code
+
+## Notes
+- The `archive/` directory contains legacy code - don't modify unless needed
+- The `layers/` directory is for AWS Lambda layers - typically not modified directly
+- Configuration files in `data/input/` should be versioned (rules_config_v4.json)
+- API routes are in `api/routes/` with middleware in `api/middleware/`
+
+## Common Pitfalls to Avoid
+1. **Wildcard imports**: Use explicit imports
+2. **Print statements**: Use structured logging
+3. **Bare except clauses**: Catch specific exceptions
+4. **Hard-coded paths**: Use configuration management
+5. **Missing type hints**: Add type hints to all public functions
+6. **No error handling**: Use custom exceptions with proper error messages
+7. **Breaking changes**: Maintain backward compatibility when possible
+8. **No tests**: Always add tests for new functionality
+9. **Rule evaluation tracking order**: When using hit policies (UNIQUE/FIRST) with dry-run mode, always track rule evaluations BEFORE breaking out of loops. Breaking before tracking causes matched rules to be missing from `would_match` array.
+10. **DMN execution order**: Ensure decisions are executed in dependency order. Check `execution_order` from DMN parser before executing decisions.
+

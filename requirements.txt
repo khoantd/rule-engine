@@ -1,0 +1,25 @@
+# Production dependencies for Rule Engine
+# Install with: pip install -r requirements.txt
+#
+# IMPORTANT: Always use a virtual environment to avoid dependency conflicts!
+# Create virtual environment: python -m venv .venv
+# Activate: source .venv/bin/activate (macOS/Linux) or .venv\Scripts\activate (Windows)
+
+# Rule engine core library
+# Note: Package name on PyPI is 'rule-engine', but import is 'rule_engine'
+rule-engine==4.1.0
+
+# JSON utilities
+jsonpath_ng==1.5.3
+
+# Data classes with JSON support
+dataclasses-json==0.6.6
+
+# Web API framework (FastAPI)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+python-multipart==0.0.6
+
+# Note: Sphinx is NOT a production dependency
+# For documentation tools, use: pip install -r requirements-dev.txt

@@ -1,0 +1,44 @@
+{
+  "rules_set": [
+    {
+      "rulename": "Rule1",
+      "type": "simple",
+      "priority": 1,
+      "conditions": {
+        "item": "C0001"
+      },
+      "rulepoint": 10.0,
+      "weight": 1.0,
+      "action_result": "A"
+    },
+    {
+      "rulename": "Rule2",
+      "type": "simple",
+      "priority": 2,
+      "conditions": {
+        "item": "C0002"
+      },
+      "rulepoint": 20.0,
+      "weight": 1.5,
+      "action_result": "B"
+    },
+    {
+      "rulename": "Rule3",
+      "type": "complex",
+      "priority": 3,
+      "conditions": {
+        "items": ["C0001", "C0002"],
+        "mode": "and"
+      },
+      "rulepoint": 30.0,
+      "weight": 2.0,
+      "action_result": "C"
+    }
+  ],
+  "patterns": {
+    "AB-": "APPROVED",
+    "ABC": "REVIEWED",
+    "-BC": "REJECTED"
+  }
+}
+

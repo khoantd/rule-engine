@@ -1,0 +1,45 @@
+{
+  "rules_set": [
+    {
+      "id": "R0001",
+      "rule_name": "Rule 1",
+      "attribute": "issue",
+      "condition": "greater_than",
+      "constant": "30",
+      "message": "the issue is greater than 30",
+      "weight": 30,
+      "rule_point": 20,
+      "priority": 1,
+      "action_result": "Y"
+    },
+    {
+      "id": "R0002",
+      "rule_name": "Rule 2",
+      "attribute": "title",
+      "condition": "equal",
+      "constant": "'Superman'",
+      "message": "the title is Superman",
+      "weight": 20,
+      "rule_point": 15,
+      "priority": 2,
+      "action_result": "Y"
+    },
+    {
+      "id": "R0003",
+      "rule_name": "Rule 3",
+      "attribute": "publisher",
+      "condition": "range",
+      "constant": "['DC','Marvel']",
+      "message": "the issue is less than 10",
+      "weight": 5,
+      "rule_point": 10,
+      "priority": 3,
+      "action_result": "Y"
+    }
+  ],
+  "patterns": {
+    "YYY": "Approved",
+    "Y--": "Rejected",
+    "YY-": "Reviewed"
+  }
+}

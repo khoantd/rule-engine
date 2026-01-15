@@ -1,0 +1,95 @@
+{
+  "conditions_set": [
+    {
+      "condition_id": "C0001",
+      "condition_name": "Condition 1",
+      "attribute": "issue",
+      "equation": "greater_than",
+      "constant": "30"
+    },
+    {
+      "condition_id": "C0002",
+      "condition_name": "Condition 2",
+      "attribute": "title",
+      "equation": "equal",
+      "constant": "Superman"
+    },
+    {
+      "condition_id": "C0003",
+      "condition_name": "Condition 3",
+      "attribute": "publisher",
+      "equation": "range",
+      "constant": "['DC','Marvel']"
+    },
+    {
+      "condition_id": "C0004",
+      "condition_name": "Condition 4",
+      "attribute": "age_till_now",
+      "equation": "greater_than",
+      "constant": 90
+    },
+    {
+      "condition_id": "C0005",
+      "condition_name": "Condition 5",
+      "attribute": "age_till_now",
+      "equation": "greater_than",
+      "constant": 30
+    },
+    {
+      "condition_id": "C0006",
+      "condition_name": "Condition 6",
+      "attribute": "age_till_now",
+      "equation": "greater_than",
+      "constant": 60
+    },
+    {
+      "condition_id": "C0007",
+      "condition_name": "Condition 7",
+      "attribute": "age_till_now",
+      "equation": "less_than",
+      "constant": 90
+    },
+    {
+      "condition_id": "C0008",
+      "condition_name": "Condition 8",
+      "attribute": "age_till_now",
+      "equation": "less_than",
+      "constant": 60
+    },
+    {
+      "condition_id": "C0009",
+      "condition_name": "Condition 9",
+      "attribute": "days_since_starting_uat",
+      "equation": "greater_than",
+      "constant": 30
+    },
+    {
+      "condition_id": "C0010",
+      "condition_name": "Condition 10",
+      "attribute": "status",
+      "equation": "range",
+      "constant": ["new"]
+    },
+    {
+      "condition_id": "C0011",
+      "condition_name": "Condition 11",
+      "attribute": "days_since_bomc_approval",
+      "equation": "greater_than",
+      "constant": 2
+    },
+    {
+      "condition_id": "C0012",
+      "condition_name": "Condition 12",
+      "attribute": "status",
+      "equation": "range",
+      "constant": ["approved"]
+    },
+    {
+      "condition_id": "C0013",
+      "condition_name": "Condition 13",
+      "attribute": "status",
+      "equation": "range",
+      "constant": ["uat"]
+    }
+  ]
+}

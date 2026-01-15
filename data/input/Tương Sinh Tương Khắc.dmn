@@ -1,0 +1,502 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:camunda="http://camunda.org/schema/1.0/dmn" xmlns:biodi="http://bpmn.io/schema/dmn/biodi/2.0" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/" id="definitions_1768448398079" name="TươngSinh" namespace="https://www.omg.org/spec/DMN/20191111/MODEL/" exporter="Camunda Modeler" exporterVersion="5.24.0">
+  <decision id="Decision_0n3v7en" name="Ngu Hanh">
+    <informationRequirement id="InformationRequirement_16ss9ly">
+      <requiredDecision href="#Decision_0nq1td4" />
+    </informationRequirement>
+    <informationRequirement id="InformationRequirement_1le31nk">
+      <requiredDecision href="#Decision_0kgjdku" />
+    </informationRequirement>
+    <decisionTable id="DecisionTable_1hdubjt">
+      <input id="InputClause_0qqtukf" label="element_1" camunda:inputVariable="element_1">
+        <inputExpression id="LiteralExpression_0e7i3fh" typeRef="string" />
+      </input>
+      <input id="InputClause_03oosdt" label="element_2" camunda:inputVariable="element_2">
+        <inputExpression id="LiteralExpression_1qt563j" typeRef="string">
+          <text></text>
+        </inputExpression>
+      </input>
+      <output id="OutputClause_1mhnxfb" label="element_score" name="element_score" typeRef="integer" biodi:width="192" />
+      <rule id="DecisionRule_0ns8ko3">
+        <inputEntry id="UnaryTests_0wj63zc">
+          <text>metal</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0311l0p">
+          <text>wood</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1ag6495">
+          <text>-1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0l4hyur">
+        <inputEntry id="UnaryTests_088hpl5">
+          <text>wood</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_00tx6qh">
+          <text>earth</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1gee1zi">
+          <text>-1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_076cd61">
+        <inputEntry id="UnaryTests_0j5pl7l">
+          <text>water</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_194nq7y">
+          <text>fire</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0nfnr50">
+          <text>-1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1c7c1bd">
+        <inputEntry id="UnaryTests_0m6bwkx">
+          <text>fire</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1lauyoy">
+          <text>metal</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_00dro63">
+          <text>-1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_087lppx">
+        <inputEntry id="UnaryTests_19dqwp3">
+          <text>earth</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_08mjk10">
+          <text>water</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1xxbpfu">
+          <text>-1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0vbb264">
+        <inputEntry id="UnaryTests_0d7jdpt">
+          <text>metal</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1yq9i61">
+          <text>water</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0akpem1">
+          <text>1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_175pm2b">
+        <inputEntry id="UnaryTests_1u8g7g1">
+          <text>wood</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1v6mosp">
+          <text>fire</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1hedebh">
+          <text>1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1n66mqu">
+        <inputEntry id="UnaryTests_0e3lc6t">
+          <text>water</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1twq2gs">
+          <text>wood</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1eim7k7">
+          <text>1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0wxk2cn">
+        <inputEntry id="UnaryTests_1yc0kj5">
+          <text>fire</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_105bkgg">
+          <text>earth</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_08dqo2w">
+          <text>1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1eplmq2">
+        <inputEntry id="UnaryTests_0ylm9wl">
+          <text>earth</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0g7162e">
+          <text>metal</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1mbqyfm">
+          <text>1</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0pt4tw9">
+        <inputEntry id="UnaryTests_1xrp72t">
+          <text>fire</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1oqwdgw">
+          <text>water</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1juyltd">
+          <text>-1</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="Decision_0nq1td4" name="Can">
+    <decisionTable id="DecisionTable_05b2r5p">
+      <input id="InputClause_0zbdztn" label="can">
+        <inputExpression id="LiteralExpression_0ngxzdo" typeRef="string" />
+      </input>
+      <output id="OutputClause_090sihz" label="element_1" typeRef="string" />
+      <output id="OutputClause_06vb0yb" label="can_yin_yang" name="can_yin_yang" typeRef="string" />
+      <rule id="DecisionRule_05kxzxx">
+        <inputEntry id="UnaryTests_0gpr24n">
+          <text>giap</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_11mu7vk">
+          <text>wood</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0hii4fn">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1v0rhmh">
+        <inputEntry id="UnaryTests_0ipgbt2">
+          <text>at</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0ihxnlt">
+          <text>wood</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1gu7qsp">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1ffdhfr">
+        <inputEntry id="UnaryTests_1e01t6v">
+          <text>binh</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_07rorfg">
+          <text>fire</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0s60hdb">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_153uhoh">
+        <inputEntry id="UnaryTests_1c1xo0y">
+          <text>dinh</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1eqtr8s">
+          <text>fire</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1fprvvj">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_127girh">
+        <inputEntry id="UnaryTests_01brh4m">
+          <text>mau</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1253w19">
+          <text>earth</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_10gstog">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_02km3um">
+        <inputEntry id="UnaryTests_1xc7xf3">
+          <text>ky</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1nazo1s">
+          <text>earth</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1jznw7o">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1aeir92">
+        <inputEntry id="UnaryTests_1csxo63">
+          <text>canh</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1fxktw8">
+          <text>metal</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1g06rl7">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1dzqoio">
+        <inputEntry id="UnaryTests_0nb5jfr">
+          <text>tan</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_18ek4dd">
+          <text>metal</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0x5q90j">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1cg5ur8">
+        <inputEntry id="UnaryTests_1p2ems2">
+          <text>nham</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1b5ch20">
+          <text>water</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1lmnicz">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1e28gx3">
+        <inputEntry id="UnaryTests_17twktj">
+          <text>quy</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1m8vrlr">
+          <text>water</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0stooem">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="Decision_0kgjdku" name="Chi">
+    <decisionTable id="DecisionTable_0h8gnsq">
+      <input id="InputClause_1n3moka" label="chi">
+        <inputExpression id="LiteralExpression_0krdjj3" typeRef="string" />
+      </input>
+      <output id="OutputClause_0vezupy" label="element_2" typeRef="string" />
+      <output id="OutputClause_1wkj1gn" label="chi_yin_yang" name="chi_yin_yang" typeRef="string" />
+      <rule id="DecisionRule_1mto94v">
+        <inputEntry id="UnaryTests_14qjsov">
+          <text>ty</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1a57xip">
+          <text>water</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0atruqg">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1sfc3wj">
+        <inputEntry id="UnaryTests_048dawc">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1bkjxip">
+          <text>earth</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_03z7guw">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_12nr0ii">
+        <inputEntry id="UnaryTests_070k69b">
+          <text>dan</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0etdnh4">
+          <text>wood</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0xdsyb5">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_14r0zxj">
+        <inputEntry id="UnaryTests_0zbju13">
+          <text>meo</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1m97jpd">
+          <text>wood</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1twba6w">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0d0b2iz">
+        <inputEntry id="UnaryTests_0goyuto">
+          <text>thin</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0c5ofeb">
+          <text>earth</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0umv0ti">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0vju3ar">
+        <inputEntry id="UnaryTests_0g7zwy4">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1j42ftj">
+          <text>fire</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1ts7trd">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_01wc1v6">
+        <inputEntry id="UnaryTests_0gcuqn6">
+          <text>ngo</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0972dy9">
+          <text>fire</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1l8kwx3">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0pv8yic">
+        <inputEntry id="UnaryTests_11cknr5">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_12t2qts">
+          <text>earth</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0inez97">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1h8st1k">
+        <inputEntry id="UnaryTests_09xtbj8">
+          <text>than</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1prx7f3">
+          <text>metal</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_14e8315">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_16k3pze">
+        <inputEntry id="UnaryTests_1rb0uba">
+          <text>dau</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0b66mvb">
+          <text>metal</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1t3v3ox">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0prccjo">
+        <inputEntry id="UnaryTests_00oow4d">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0wft8ut">
+          <text>earth</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_10tavaw">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0sg66mz">
+        <inputEntry id="UnaryTests_1mmau0w">
+          <text>hoi</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_18n4t16">
+          <text>water</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_15yrl2t">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="Decision_091c98u" name="Can Chi">
+    <informationRequirement id="InformationRequirement_1ifndtr">
+      <requiredDecision href="#Decision_0nq1td4" />
+    </informationRequirement>
+    <informationRequirement id="InformationRequirement_1tu0ng5">
+      <requiredDecision href="#Decision_0kgjdku" />
+    </informationRequirement>
+    <informationRequirement id="InformationRequirement_0ujtoqh">
+      <requiredDecision href="#Decision_0n3v7en" />
+    </informationRequirement>
+    <decisionTable id="DecisionTable_1iu1kv3">
+      <input id="InputClause_0a88am2" label="can_yin_yang" camunda:inputVariable="can_yin_yang">
+        <inputExpression id="LiteralExpression_1lv06g1" typeRef="string" />
+      </input>
+      <input id="InputClause_09wzoni" label="chi_yin_yang" camunda:inputVariable="chi_yin_yang">
+        <inputExpression id="LiteralExpression_0jhdupb" typeRef="string">
+          <text></text>
+        </inputExpression>
+      </input>
+      <output id="OutputClause_0nnbw4g" label="can_chi" name="can_chi" typeRef="string" />
+      <output id="OutputClause_0j6gxa9" label="can_chi score" name="can_chi_score" typeRef="string" />
+      <output id="OutputClause_1239i42" label="can_chi_yin_yang" name="can_chi_yin_yang" typeRef="string" />
+      <rule id="DecisionRule_1srlgw5">
+        <inputEntry id="UnaryTests_0kphc1w">
+          <text>yin</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_041448o">
+          <text>yin</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0xnvrdr">
+          <text>string join({can},"-",{chi})</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0v5dhim">
+          <text>{element_score}</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0f9nh92">
+          <text>yin</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0autmsu">
+        <inputEntry id="UnaryTests_1giqkyq">
+          <text>yang</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_06jmwr7">
+          <text>yang</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0xwu5md">
+          <text>string join({can},"-",{chi})</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_17rzjkz">
+          <text>{element_score}</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0bfbhud">
+          <text>yang</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_15ls9ox">
+      <dmndi:DMNShape id="DMNShape_1aco0g2" dmnElementRef="Decision_0n3v7en">
+        <dc:Bounds height="80" width="180" x="350" y="310" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_0x67pjw" dmnElementRef="Decision_0nq1td4">
+        <dc:Bounds height="80" width="180" x="130" y="80" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_102ixfg" dmnElementRef="Decision_0kgjdku">
+        <dc:Bounds height="80" width="180" x="550" y="80" />
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge id="DMNEdge_1o69we6" dmnElementRef="InformationRequirement_16ss9ly">
+        <di:waypoint x="220" y="160" />
+        <di:waypoint x="410" y="290" />
+        <di:waypoint x="410" y="310" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_19gykhh" dmnElementRef="InformationRequirement_1le31nk">
+        <di:waypoint x="640" y="160" />
+        <di:waypoint x="470" y="290" />
+        <di:waypoint x="470" y="310" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNShape id="DMNShape_0ygg5hm" dmnElementRef="Decision_091c98u">
+        <dc:Bounds height="80" width="180" x="350" y="630" />
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge id="DMNEdge_0uq810f" dmnElementRef="InformationRequirement_1ifndtr">
+        <di:waypoint x="220" y="160" />
+        <di:waypoint x="395" y="610" />
+        <di:waypoint x="395" y="630" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_0hem3ki" dmnElementRef="InformationRequirement_1tu0ng5">
+        <di:waypoint x="640" y="160" />
+        <di:waypoint x="485" y="610" />
+        <di:waypoint x="485" y="630" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="DMNEdge_1adnvt2" dmnElementRef="InformationRequirement_0ujtoqh">
+        <di:waypoint x="440" y="390" />
+        <di:waypoint x="440" y="610" />
+        <di:waypoint x="440" y="630" />
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>
