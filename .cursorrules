@@ -1,7 +1,7 @@
 # Rule Engine - Cursor Rules
 
 ## Project Overview
-This is a Python rule engine project for evaluating business rules and workflows. The codebase follows a layered architecture with clear separation of concerns.
+This is a Python rule engine for evaluating business rules and workflows with DMN (Decision Model Notation) support. The codebase follows a layered architecture with clear separation of concerns, supporting both JSON and DMN rule formats.
 
 ## Core Principles
 - **Preserve working code**: Do not break existing functionality. Enhance things carefully. Fix things carefully.
@@ -9,397 +9,1501 @@ This is a Python rule engine project for evaluating business rules and workflows
 - **Type safety**: Add type hints to all public functions and methods.
 - **Test coverage**: Maintain 80%+ test coverage, aim for 90%+ on new code.
 - **Structured logging**: Use `common.logger` instead of print statements.
+- **DMN-first**: When working with decision tables, prefer DMN format for complex dependencies.
+- **Performance**: Use caching appropriately, avoid N+1 queries, batch where possible.
 
 ## Architecture Guidelines
 
 ### Directory Structure
-- `common/`: Shared utilities (logging, exceptions, config, DI)
-- `domain/`: Business logic and domain models (rules, actions, conditions, handlers)
-- `services/`: High-level services (ruleengine_exec, workflow_exec)
-- `api/`: API layer with routes and middleware
-- `tests/`: Test suite (unit, integration)
-- `config/`: Configuration files
-- `data/`: Data files and rule configurations
+```
+rule_engine/
+├── common/              # Shared utilities (logging, exceptions, config, DI)
+│   ├── logger.py       # Structured logging with correlation IDs
+│   ├── exceptions.py   # Custom exception hierarchy
+│   ├── dmn_parser.py   # DMN XML parser with dependency resolution
+│   ├── rule_engine_util.py  # Core rule utilities and FEEL expression evaluation
+│   ├── config_loader.py     # Cached configuration loader
+│   ├── metrics.py           # CloudWatch metrics tracking
+│   ├── execution_history.py # Execution history tracking
+│   ├── cache.py             # Caching utilities (LRU, TTL, file-based)
+│   ├── di/                  # Dependency injection container
+│   ├── pattern/             # Design patterns (Chain of Responsibility)
+│   └── repository/          # Configuration repository pattern
+├── domain/              # Business logic and domain models
+│   ├── rules/          # Rule domain objects
+│   ├── actions/        # Action domain objects
+│   ├── conditions/     # Condition domain objects
+│   ├── handler/        # Workflow handlers (Chain of Responsibility)
+│   └── ticket/         # Ticket domain objects
+├── services/           # High-level services
+│   ├── ruleengine_exec.py  # Rule execution engine (JSON + DMN)
+│   └── workflow_exec.py    # Workflow orchestration
+├── api/                # FastAPI REST API layer
+│   ├── main.py         # FastAPI application with middleware
+│   ├── models.py       # Pydantic models for request/response
+│   ├── routes/         # API route handlers
+│   └── middleware/     # Custom middleware (auth, logging, errors)
+├── tests/              # Test suite (unit, integration)
+│   ├── unit/           # Fast, isolated unit tests
+│   └── integration/    # Integration tests
+├── config/             # Configuration files
+├── data/               # Data files and rule configurations
+│   └── input/          # Rules JSON and DMN files
+├── docs/               # Sphinx documentation
+└── layers/             # AWS Lambda layers
+```
 
 ### Layer Separation
-- Domain layer should not depend on services or infrastructure
-- Services layer orchestrates domain logic
-- Common utilities are shared across all layers
+- **Domain layer** should not depend on services or infrastructure
+- **Services layer** orchestrates domain logic and handles transactions
+- **Common utilities** are shared across all layers
+- **API layer** handles HTTP concerns only (validation, serialization, auth)
 - Keep concerns separated - don't mix configuration, execution, and domain logic
+- Never import from API layer into service or domain layers
 
 ## Code Style & Standards
 
 ### Python Version
 - Target Python 3.8+
 - Use type hints compatible with Python 3.8
+- Avoid features from Python 3.9+ (e.g., dict union operator `|`)
 
 ### Code Formatting
 - Use Black with 100 character line length (configured in pyproject.toml)
-- Format code before committing
+- Format code before committing: `black .`
 - Follow PEP 8 with project-specific overrides
 
 ### Import Organization
 ```python
-# 1. Standard library imports
+# 1. Standard library imports (alphabetical)
 import json
-from typing import Dict, Any, List
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
-# 2. Third-party imports
-from rule_engine import Rule
+# 2. Third-party imports (alphabetical)
+import rule_engine
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
-# 3. Local imports
+# 3. Local imports (by layer: common, domain, services, api)
 from common.logger import get_logger
-from common.exceptions import RuleEvaluationError
+from common.exceptions import RuleEvaluationError, ConfigurationError
+from common.dmn_parser import DMNParser
+from domain.rules.rule_obj import ExtRule
+from services.ruleengine_exec import rules_exec
 ```
 
-**CRITICAL**: Avoid wildcard imports (`from module import *`). Always use explicit imports.
+**CRITICAL**:
+- Avoid wildcard imports (`from module import *`)
+- Always use explicit imports
+- Group imports by category (standard, third-party, local)
 
 ### Type Hints
-All public functions must have type hints:
+All public functions must have comprehensive type hints:
 ```python
-def rules_exec(data: Dict[str, Any]) -> Dict[str, Any]:
+from typing import Any, Dict, List, Optional
+
+def rules_exec(
+    data: Dict[str, Any],
+    dry_run: bool = False,
+    correlation_id: Optional[str] = None
+) -> Dict[str, Any]:
     """Execute rules against input data."""
     pass
 ```
 
+**Type hint guidelines**:
+- Use `Optional[T]` for nullable values
+- Use `Union[A, B]` for multiple types (or `A | B` in Python 3.10+)
+- Use `List[T]`, `Dict[K, V]`, not `list`, `dict`
+- Import types from `typing` module
+- Add return type hints even for `None` returns
+
 ### Naming Conventions
-- Functions: `snake_case` (e.g., `rules_exec`, `validate_input`)
-- Classes: `PascalCase` (e.g., `RuleEvaluationError`, `ConfigLoader`)
-- Constants: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`, `DEFAULT_TIMEOUT`)
-- Private: Prefix with `_` (e.g., `_internal_helper`)
+- **Functions/Methods**: `snake_case` (e.g., `rules_exec`, `validate_input_data`)
+- **Classes**: `PascalCase` (e.g., `RuleEvaluationError`, `ConfigLoader`, `DMNParser`)
+- **Constants**: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`, `DEFAULT_TIMEOUT`, `DMN_NS`)
+- **Private**: Prefix with `_` (e.g., `_internal_helper`, `_parse_feel_expression`)
+- **Protected**: Single underscore prefix (e.g., `_build_execution_order`)
+- **Very private**: Double underscore for name mangling (rarely used)
 
 ## Error Handling
 
-### Custom Exceptions
+### Custom Exception Hierarchy
 Always use custom exceptions from `common.exceptions`:
-- `DataValidationError`: Invalid input data
-- `ConfigurationError`: Configuration loading issues
+- `DataValidationError`: Invalid input data (user error)
+- `ConfigurationError`: Configuration loading/parsing issues
 - `RuleEvaluationError`: Rule execution failures
+- `RuleCompilationError`: Rule compilation/parsing errors
 - `WorkflowError`: Workflow execution failures
 
 ```python
-from common.exceptions import DataValidationError
+from common.exceptions import DataValidationError, ConfigurationError
 
+# With error code and context
 if not data:
-    raise DataValidationError("Input data cannot be None", error_code="DATA_NONE")
+    raise DataValidationError(
+        "Input data cannot be None",
+        error_code="DATA_NONE",
+        context={'data': data}
+    )
+
+# With exception chaining
+try:
+    result = parse_config(file_path)
+except FileNotFoundError as e:
+    raise ConfigurationError(
+        f"Config file not found: {file_path}",
+        error_code="CONFIG_NOT_FOUND",
+        context={'file_path': file_path}
+    ) from e
 ```
 
 ### Exception Handling Best Practices
-- Never use bare `except:` clauses
-- Catch specific exceptions first, then general
-- Log errors with context before raising
-- Preserve exception chain with `from e`
+- **Never use bare `except:` clauses** - always catch specific exceptions
+- **Catch specific exceptions first**, then more general ones
+- **Log errors with context** before raising or re-raising
+- **Preserve exception chain** with `from e` for debugging
+- **Don't swallow exceptions** unless you have a good reason
+- **Use try-except-else-finally** appropriately
+- **Clean up resources** in finally blocks or use context managers
+
+```python
+# Good: Specific exception handling with chaining
+try:
+    config = load_config(file_path)
+except FileNotFoundError as e:
+    logger.error("Config file not found", file_path=file_path)
+    raise ConfigurationError(f"Config not found: {file_path}") from e
+except json.JSONDecodeError as e:
+    logger.error("Invalid JSON in config", file_path=file_path, error=str(e))
+    raise ConfigurationError(f"Invalid JSON: {file_path}") from e
+finally:
+    cleanup_temp_files()
+
+# Bad: Bare except
+try:
+    result = some_operation()
+except:  # ❌ Never do this
+    pass
+```
 
 ## Logging
 
-### Structured Logging
-Use `common.logger.get_logger()` for all logging:
+### Structured Logging with Context
+Use `common.logger.get_logger()` for all logging with structured fields:
 ```python
 from common.logger import get_logger
 
 logger = get_logger(__name__)
-logger.info("Processing rule", rule_id=rule_id, priority=priority)
-logger.error("Rule evaluation failed", rule_id=rule_id, exc_info=True)
+
+# Info with structured fields
+logger.info("Processing rule",
+           rule_id=rule_id,
+           priority=priority,
+           correlation_id=correlation_id)
+
+# Error with exception info
+logger.error("Rule evaluation failed",
+            rule_id=rule_id,
+            input_data=data,
+            exc_info=True)  # Includes stack trace
+
+# Debug for detailed information
+logger.debug("Parsing DMN decision",
+            decision_id=decision_id,
+            decision_name=decision_name,
+            input_count=len(inputs),
+            output_count=len(outputs))
+
+# Warning for non-critical issues
+logger.warning("Using default value",
+              field_name=field_name,
+              default_value=default_value,
+              reason="Field not found in config")
 ```
 
-**CRITICAL**: Never use `print()` statements. Replace all print statements with proper logging.
+**CRITICAL**:
+- **Never use `print()` statements** - always use logger
+- Use structured fields instead of string formatting in log messages
+- Include `correlation_id` for request tracing
+- Use `exc_info=True` for errors to capture stack traces
 
 ### Log Levels
-- `DEBUG`: Detailed information for debugging
-- `INFO`: General informational messages
-- `WARNING`: Warning messages (e.g., deprecated usage)
-- `ERROR`: Error messages that need attention
-- `CRITICAL`: Critical errors requiring immediate action
+- `DEBUG`: Detailed information for debugging (verbose, disabled in production)
+- `INFO`: General informational messages (important operations, results)
+- `WARNING`: Warning messages (deprecated usage, fallbacks, recoverable errors)
+- `ERROR`: Error messages that need attention (failures, exceptions)
+- `CRITICAL`: Critical errors requiring immediate action (system failures)
+
+### What to Log
+- **INFO**: Rule execution start/completion, DMN parsing, decision execution
+- **DEBUG**: Individual rule evaluation, condition parsing, output mapping
+- **WARNING**: Missing configurations, fallback values, optional failures
+- **ERROR**: Rule evaluation failures, parsing errors, validation errors
+- Include context: correlation_id, execution_id, rule_id, decision_id
 
 ## Testing Requirements
 
 ### Test Organization
-- Unit tests: `tests/unit/` - fast, isolated, mocked dependencies
-- Integration tests: `tests/integration/` - test component interactions
-- Use pytest markers: `@pytest.mark.unit`, `@pytest.mark.integration`
+```
+tests/
+├── unit/                    # Fast, isolated unit tests
+│   ├── test_ruleengine_exec.py
+│   ├── test_dmn_parser.py
+│   ├── test_rule_engine_util.py
+│   └── test_config_loader.py
+├── integration/             # Integration tests
+│   ├── test_api_endpoints.py
+│   ├── test_dmn_execution.py
+│   └── test_workflow_integration.py
+└── fixtures/                # Test fixtures and sample data
+    ├── sample_rules.json
+    └── sample_rules.dmn
+```
 
-### Test Naming
+### Test Markers
+Use pytest markers to categorize tests:
 ```python
-def test_rules_exec_with_valid_data(self):
-    """Test rule execution with valid input data."""
+import pytest
+
+@pytest.mark.unit
+def test_parse_feel_expression():
+    """Unit test for FEEL expression parsing."""
     pass
 
-def test_rules_exec_raises_error_with_invalid_data(self):
-    """Test rule execution raises error with invalid data."""
+@pytest.mark.integration
+def test_dmn_execution_with_dependencies():
+    """Integration test for DMN with dependent decisions."""
+    pass
+
+@pytest.mark.slow
+def test_batch_execution_performance():
+    """Performance test for batch execution."""
+    pass
+```
+
+Run specific test categories:
+```bash
+pytest -m unit           # Run only unit tests
+pytest -m integration    # Run only integration tests
+pytest -m "not slow"     # Skip slow tests
+```
+
+### Test Naming Convention
+```python
+# Pattern: test_<function>_<condition>_<expected_result>
+def test_rules_exec_with_valid_data_returns_results(self):
+    """Test rule execution with valid input data returns expected results."""
+    pass
+
+def test_rules_exec_with_none_data_raises_validation_error(self):
+    """Test rule execution with None data raises DataValidationError."""
+    pass
+
+def test_dmn_parser_with_dependencies_returns_correct_order(self):
+    """Test DMN parser resolves dependencies and returns correct execution order."""
     pass
 ```
 
 ### Coverage Requirements
-- Minimum: 80% overall
-- New code: 90%+ coverage
-- Critical paths: 100% coverage
+- **Minimum**: 80% overall coverage
+- **New code**: 90%+ coverage required
+- **Critical paths**: 100% coverage (rule execution, DMN parsing, validation)
+- **API endpoints**: 100% coverage for all routes
 
-### Test Structure
+### Test Structure (AAA Pattern)
 ```python
 import pytest
-from services.ruleengine_exec import rules_exec
+from services.ruleengine_exec import rules_exec, dmn_rules_exec
 from common.exceptions import DataValidationError
 
 class TestRulesExec:
     """Test suite for rules_exec function."""
-    
-    def test_rules_exec_with_valid_data(self):
-        """Test rule execution with valid input data."""
-        data = {'issue': 35, 'title': 'Superman'}
+
+    def test_rules_exec_with_valid_data_returns_expected_results(self):
+        """Test rule execution with valid input data returns expected results."""
+        # Arrange
+        data = {'issue': 35, 'title': 'Superman', 'publisher': 'DC'}
+
+        # Act
         result = rules_exec(data)
-        
+
+        # Assert
         assert 'total_points' in result
         assert 'pattern_result' in result
+        assert 'action_recommendation' in result
+        assert result['total_points'] > 0
+        assert isinstance(result['pattern_result'], str)
+
+    def test_rules_exec_with_none_raises_validation_error(self):
+        """Test rule execution with None raises DataValidationError."""
+        # Arrange
+        data = None
+
+        # Act & Assert
+        with pytest.raises(DataValidationError) as exc_info:
+            rules_exec(data)
+
+        assert exc_info.value.error_code == "DATA_NONE"
+        assert "cannot be None" in str(exc_info.value)
+```
+
+### Mocking Best Practices
+```python
+from unittest.mock import Mock, patch, MagicMock
+
+class TestDMNParser:
+    """Test suite for DMN parser."""
+
+    @patch('common.dmn_parser.ET.parse')
+    def test_parse_file_with_valid_dmn(self, mock_parse):
+        """Test parsing valid DMN file."""
+        # Arrange
+        mock_tree = Mock()
+        mock_parse.return_value = mock_tree
+        # ... setup mock structure
+
+        # Act
+        parser = DMNParser()
+        result = parser.parse_file('test.dmn')
+
+        # Assert
+        assert 'rules_set' in result
+        assert 'execution_order' in result
+        mock_parse.assert_called_once_with('test.dmn')
 ```
 
 ## Documentation Standards
 
-### Docstrings
-Use Google-style docstrings for all public functions:
+### Docstring Format (Google Style)
+Use comprehensive Google-style docstrings for all public functions:
+
 ```python
-def rules_exec(data: Dict[str, Any]) -> Dict[str, Any]:
+def dmn_rules_exec(
+    dmn_file: Optional[str] = None,
+    dmn_content: Optional[str] = None,
+    data: Any = None,
+    dry_run: bool = False,
+    correlation_id: Optional[str] = None
+) -> Dict[str, Any]:
     """
-    Execute rules against input data.
-    
+    Execute rules from a DMN file against input data.
+
+    This function parses a DMN file (from file path or XML content), converts
+    the DMN rules to execution format, and executes them against the provided
+    input data. Decisions are executed in dependency order based on their
+    informationRequirement declarations.
+
     Args:
-        data: Dictionary containing input data for rule evaluation
-        
+        dmn_file: Path to DMN file (relative to data/input or absolute path).
+            Mutually exclusive with dmn_content.
+        dmn_content: DMN XML content as string. Mutually exclusive with dmn_file.
+        data: Dictionary containing input data for rule evaluation. Must be
+            a dictionary (can be empty).
+        dry_run: If True, execute rules without side effects (preview mode).
+            Includes detailed evaluation information in response.
+        correlation_id: Optional correlation ID for request tracing. If not
+            provided, a UUID will be generated.
+
     Returns:
         Dictionary containing:
-            - total_points: Sum of rule points
-            - pattern_result: Concatenated action results
-            - action_recommendation: Recommended action
-            
+            - total_points (float): Sum of rule points (weighted)
+            - pattern_result (str): Concatenated action results
+            - action_recommendation (str or None): Recommended action based on pattern
+            - decision_outputs (Dict[str, Any]): Mapped decision outputs (if any)
+            - rule_evaluations (List[Dict]): Detailed evaluations (dry_run only)
+            - would_match (List[Dict]): Rules that matched (dry_run only)
+            - would_not_match (List[Dict]): Rules that didn't match (dry_run only)
+            - dry_run (bool): True if dry_run mode (dry_run only)
+
     Raises:
-        DataValidationError: If input data is invalid
-        ConfigurationError: If configuration cannot be loaded
+        DataValidationError: If input data is invalid or both/neither DMN sources provided
+        ConfigurationError: If DMN file cannot be read or parsed
         RuleEvaluationError: If rule evaluation fails
-        
+
     Example:
-        >>> data = {'issue': 35, 'title': 'Superman'}
-        >>> result = rules_exec(data)
+        >>> # Execute from DMN file
+        >>> result = dmn_rules_exec(
+        ...     dmn_file='sample_rules.dmn',
+        ...     data={'season': 'Fall', 'guests': 5}
+        ... )
         >>> result['total_points']
-        1050.0
+        50.0
+        >>> result['decision_outputs']
+        {'dish': 'Spareribs'}
+
+        >>> # Execute with dry run for detailed analysis
+        >>> result = dmn_rules_exec(
+        ...     dmn_file='sample_rules.dmn',
+        ...     data={'can': 'Giáp', 'chi': 'Tý'},
+        ...     dry_run=True
+        ... )
+        >>> len(result['rule_evaluations'])
+        12
+        >>> len(result['would_match'])
+        3
+
+    Note:
+        - Decisions are executed in dependency order (topological sort)
+        - Each decision's outputs are mapped to input fields for dependent decisions
+        - Hit policies (UNIQUE/FIRST) stop evaluation after first match per decision
+        - Correlation ID is used for tracing across distributed systems
     """
     pass
 ```
 
-## Code Quality Guidelines
-
-### Removing Dead Code
-- Remove commented-out code blocks
-- Delete unused imports (use linter to identify)
-- Remove unused variables
-- Empty functions should be implemented or removed
-
-### Code Organization
-- One module per file
-- Keep related functionality together
-- Follow DRY (Don't Repeat Yourself) principle
-- Single Responsibility Principle for functions/classes
-
-### Configuration Management
-- Use `common/config.py` for centralized configuration
-- Use environment variables for environment-specific settings
-- Don't hard-code configuration values
-- Use configuration repository pattern for multiple sources
-
-### Security
-- Use context managers (`with` statements) for file operations
-- Validate file paths to prevent directory traversal
-- Never hard-code credentials or secrets
-- Use `common/secrets_manager.py` for secret management
-
-## Specific Project Patterns
-
-### Rule Execution Pattern
+### Module Documentation
+Every module should have a module-level docstring:
 ```python
+"""
+DMN (Decision Model Notation) Parser Module.
+
+This module provides functionality to parse DMN XML files and convert them
+to the rule engine's internal rule format. It supports:
+- Parsing DMN 1.2 and 1.3 specifications
+- Decision table extraction with multiple inputs/outputs
+- Dependency resolution using informationRequirement elements
+- Topological sorting for execution order
+- FEEL expression parsing
+
+Classes:
+    DMNParser: Main parser class for DMN files
+
+Functions:
+    None (all functionality in DMNParser class)
+
+Example:
+    >>> from common.dmn_parser import DMNParser
+    >>> parser = DMNParser()
+    >>> result = parser.parse_file('rules.dmn')
+    >>> rules = result['rules_set']
+    >>> execution_order = result['execution_order']
+"""
+```
+
+## DMN (Decision Model Notation) Guidelines
+
+### DMN Parser Usage
+```python
+from common.dmn_parser import DMNParser
+
+# Parse DMN file
+parser = DMNParser()
+result = parser.parse_file('data/input/sample_rules.dmn')
+
+# Result structure
+rules_set = result['rules_set']              # List of converted rules
+decisions_metadata = result['decisions_metadata']  # Decision metadata
+execution_order = result['execution_order']  # Dependency-ordered execution
+
+# Parse DMN content from string
+xml_content = """<?xml version="1.0" encoding="UTF-8"?>..."""
+result = parser.parse_content(xml_content)
+```
+
+### DMN Execution Pattern
+```python
+from services.ruleengine_exec import dmn_rules_exec
+
+# Execute DMN with dependency resolution
+result = dmn_rules_exec(
+    dmn_file='Tương Sinh Tương Khắc.dmn',
+    data={'can': 'Giáp', 'chi': 'Tý'},
+    dry_run=True,
+    correlation_id='req-001'
+)
+
+# Result includes decision outputs from dependent decisions
+decision_outputs = result['decision_outputs']  # e.g., {'element_1': 'Mộc', 'element_2': 'Thủy'}
+
+# Access detailed rule evaluations in dry-run mode
+for evaluation in result['rule_evaluations']:
+    print(f"Rule: {evaluation['rule_name']}")
+    print(f"Matched: {evaluation['matched']}")
+    print(f"Condition: {evaluation['condition']}")
+```
+
+### DMN Decision Dependencies
+**CRITICAL**: DMN decisions can depend on outputs from other decisions. The parser:
+1. Extracts `informationRequirement` elements to identify dependencies
+2. Performs topological sort to determine execution order
+3. Executes decisions in dependency order
+4. Maps each decision's outputs to input field names
+5. Enriches data context with outputs for dependent decisions
+
+```python
+# Example dependency chain:
+# Decision 1: Uses 'can' and 'chi' inputs → outputs 'element_1'
+# Decision 2: Uses 'element_1' input → outputs 'element_2'
+# Decision 3: Uses 'element_1' and 'element_2' → outputs 'relationship'
+
+# Execution order: [Decision_1, Decision_2, Decision_3]
+```
+
+### FEEL Expression Parsing
+The DMN parser handles FEEL (Friendly Enough Expression Language) expressions:
+
+**Supported patterns**:
+- Quoted strings: `"Fall"`, `'Summer'`
+- Numeric comparisons: `> 5`, `>= 10`, `< 100`, `<= 50`
+- Ranges: `[5..10]` (inclusive range)
+- Lists: `["Fall", "Winter"]`
+- Empty/Any: `-` (matches anything)
+- Not equal: `not("Spring")`
+
+```python
+# FEEL expression conversion examples:
+">= 5"         → condition: "greater_than_or_equal", constant: "5"
+"[5..10]"      → condition: "range", constant: "[5, 10]"
+'"Fall"'       → condition: "equal", constant: '"Fall"'
+"-"            → condition: "equal", constant: "''" (matches anything)
+```
+
+### DMN Multiple Inputs/Outputs
+DMN decision tables support multiple input columns (AND logic) and multiple output columns:
+
+```python
+# Multiple inputs are combined with AND:
+# Input 1: season == "Fall"  AND  Input 2: guests >= 5
+# Combined: season == "Fall" and guests >= 5
+
+# Multiple outputs are stored in rule['outputs']:
+rule = {
+    'outputs': {
+        'Dish': 'Spareribs',
+        'Beverages': 'Aecht Schlenkerla Rauchbier',
+        'Annotation': 'Best match for fall season'
+    }
+}
+
+# Outputs are mapped to input field names for dependent decisions
+```
+
+### DMN Hit Policies
+**Hit policies** determine how rules are evaluated:
+- `UNIQUE`: Only one rule should match (first match wins)
+- `FIRST`: Return first matching rule and stop
+- `ANY`: Any matching rule is acceptable
+- `COLLECT`: Return all matching rules (default for multiple outputs)
+
+**CRITICAL**: When using hit policies (UNIQUE/FIRST) with dry-run mode:
+1. **Always track rule evaluation BEFORE breaking**
+2. Add evaluation to `rule_evaluations` list first
+3. Then check if should break based on hit policy
+4. This ensures matched rules appear in `would_match` array
+
+```python
+# Correct: Track evaluation before break
+if dry_run:
+    rule_evaluation = {
+        'rule_name': rule_id,
+        'matched': rule_matched,
+        # ... other fields
+    }
+    rule_evaluations.append(rule_evaluation)  # ✅ Track first
+
+# Handle hit policy: UNIQUE/FIRST - return first match
+if rule_matched and hit_policy in ('UNIQUE', 'FIRST') and len(matched_outputs) == 1:
+    break  # ✅ Break after tracking
+
+# Incorrect: Break before tracking
+if rule_matched and hit_policy == 'UNIQUE':
+    break  # ❌ This causes matched rule to not appear in would_match
+
+if dry_run:
+    rule_evaluations.append(rule_evaluation)  # ❌ Never reached
+```
+
+## API Development Guidelines
+
+### FastAPI Route Pattern
+```python
+from fastapi import APIRouter, HTTPException, status, Depends
+from api.models import RulesExecuteRequest, RulesExecuteResponse
+from services.ruleengine_exec import rules_exec
+from common.logger import get_logger
+from common.exceptions import DataValidationError, RuleEvaluationError
+
+logger = get_logger(__name__)
+router = APIRouter(prefix="/rules", tags=["rules"])
+
+
+@router.post("/execute", response_model=RulesExecuteResponse)
+async def execute_rules(request: RulesExecuteRequest) -> RulesExecuteResponse:
+    """
+    Execute rules against input data.
+
+    Args:
+        request: Rules execution request with data and options
+
+    Returns:
+        RulesExecuteResponse with results
+
+    Raises:
+        HTTPException: 400 for validation errors, 500 for execution errors
+    """
+    try:
+        logger.info("Rules execution request",
+                   correlation_id=request.correlation_id,
+                   dry_run=request.dry_run)
+
+        result = rules_exec(
+            data=request.data,
+            dry_run=request.dry_run,
+            correlation_id=request.correlation_id
+        )
+
+        return RulesExecuteResponse(**result)
+
+    except DataValidationError as e:
+        logger.warning("Validation error", error=str(e), error_code=e.error_code)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": str(e),
+                "error_code": e.error_code,
+                "context": e.context
+            }
+        )
+    except RuleEvaluationError as e:
+        logger.error("Rule evaluation error", error=str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": str(e),
+                "error_code": e.error_code
+            }
+        )
+```
+
+### Pydantic Models
+```python
+from pydantic import BaseModel, Field, validator
+from typing import Any, Dict, List, Optional
+
+class RulesExecuteRequest(BaseModel):
+    """Request model for rules execution."""
+
+    data: Dict[str, Any] = Field(
+        ...,
+        description="Input data for rule evaluation"
+    )
+    dry_run: bool = Field(
+        default=False,
+        description="Execute in dry-run mode for preview"
+    )
+    correlation_id: Optional[str] = Field(
+        default=None,
+        description="Correlation ID for request tracing"
+    )
+
+    @validator('data')
+    def validate_data_not_empty(cls, v):
+        """Validate that data is provided."""
+        if v is None:
+            raise ValueError("data cannot be None")
+        if not isinstance(v, dict):
+            raise ValueError("data must be a dictionary")
+        return v
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "data": {"issue": 35, "title": "Superman", "publisher": "DC"},
+                "dry_run": False,
+                "correlation_id": "req-12345"
+            }
+        }
+
+
+class RulesExecuteResponse(BaseModel):
+    """Response model for rules execution."""
+
+    total_points: float = Field(..., description="Total weighted points")
+    pattern_result: str = Field(..., description="Concatenated action results")
+    action_recommendation: Optional[str] = Field(None, description="Recommended action")
+    rule_evaluations: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Detailed rule evaluations (dry-run only)"
+    )
+    would_match: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Rules that would match (dry-run only)"
+    )
+    would_not_match: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Rules that would not match (dry-run only)"
+    )
+    dry_run: Optional[bool] = Field(None, description="Dry-run mode indicator")
+```
+
+### Middleware Pattern
+```python
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+import time
+import uuid
+from common.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware for request/response logging."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        """Process request and log details."""
+        # Generate correlation ID
+        correlation_id = request.headers.get('X-Correlation-ID', str(uuid.uuid4()))
+        request.state.correlation_id = correlation_id
+
+        # Log request
+        start_time = time.time()
+        logger.info("Request started",
+                   method=request.method,
+                   path=request.url.path,
+                   correlation_id=correlation_id)
+
+        # Process request
+        try:
+            response = await call_next(request)
+        except Exception as e:
+            logger.error("Request failed",
+                        method=request.method,
+                        path=request.url.path,
+                        correlation_id=correlation_id,
+                        error=str(e),
+                        exc_info=True)
+            raise
+
+        # Log response
+        duration_ms = (time.time() - start_time) * 1000
+        logger.info("Request completed",
+                   method=request.method,
+                   path=request.url.path,
+                   status_code=response.status_code,
+                   duration_ms=duration_ms,
+                   correlation_id=correlation_id)
+
+        # Add correlation ID to response headers
+        response.headers['X-Correlation-ID'] = correlation_id
+
+        return response
+```
+
+## Performance & Optimization
+
+### Caching Strategy
+```python
+from common.cache import lru_cache_with_ttl, memoize_with_cache, get_file_cache
+
+# LRU cache with TTL for frequently called functions
+@lru_cache_with_ttl(maxsize=128, ttl_seconds=300)
+def get_config_from_s3(bucket: str, key: str) -> Dict[str, Any]:
+    """Get config from S3 with 5-minute cache."""
+    return fetch_from_s3(bucket, key)
+
+# Memoization with custom cache key
+@memoize_with_cache(cache_key='rules_config')
+def load_rules_config() -> List[Dict[str, Any]]:
+    """Load rules config with memoization."""
+    return parse_rules_file()
+
+# File-based cache for configuration
+file_cache = get_file_cache()
+cached_config = file_cache.get('rules_config_v4')
+if cached_config is None:
+    cached_config = load_and_parse_config()
+    file_cache.set('rules_config_v4', cached_config, ttl=3600)
+```
+
+### Batch Execution
+```python
+from services.ruleengine_exec import rules_exec_batch
+
+# Batch execution with parallel processing
+data_list = [
+    {'issue': 35, 'title': 'Superman'},
+    {'issue': 20, 'title': 'Batman'},
+    {'issue': 50, 'title': 'Flash'}
+]
+
+result = rules_exec_batch(
+    data_list=data_list,
+    dry_run=False,
+    max_workers=4,  # Parallel workers
+    correlation_id='batch-001'
+)
+
+# Result structure
+print(f"Total: {result['summary']['total_executions']}")
+print(f"Successful: {result['summary']['successful_executions']}")
+print(f"Failed: {result['summary']['failed_executions']}")
+print(f"Avg time: {result['summary']['avg_execution_time_ms']}ms")
+
+for item_result in result['results']:
+    if item_result['status'] == 'success':
+        print(f"Item {item_result['item_index']}: {item_result['total_points']} points")
+    else:
+        print(f"Item {item_result['item_index']}: Failed - {item_result['error']}")
+```
+
+## Metrics & Monitoring
+
+### CloudWatch Metrics
+```python
+from common.metrics import get_metrics
+
+metrics = get_metrics()
+
+# Increment counters
+metrics.increment('rules_executed', dimensions={'environment': 'production'})
+metrics.increment('dmn_rules_matched', dimensions={'rule_name': 'R001'})
+
+# Put metric values
+metrics.put_metric('execution_time', 150.5, 'Milliseconds')
+metrics.put_metric('total_points', 1050.0, 'Count')
+
+# Use context manager for timing
+with metrics.timer('rule_execution', dimensions={'dry_run': 'false'}):
+    result = rules_exec(data)
+
+# Track enhanced analytics
+metrics.track_rule_execution(
+    rule_name='R001',
+    matched=True,
+    execution_time_ms=15.2
+)
+metrics.track_action('Approved')
+metrics.track_pattern('YYY')
+metrics.track_points(1050.0)
+```
+
+### Execution History
+```python
+from common.execution_history import get_execution_history
+
+history = get_execution_history()
+
+# Log execution
+history.log_execution(
+    input_data={'issue': 35},
+    output_data={'total_points': 1050.0},
+    execution_time_ms=150.5,
+    correlation_id='req-001',
+    rules_evaluated=10,
+    rules_matched=3
+)
+
+# Log failed execution
+history.log_execution(
+    input_data={'issue': 35},
+    output_data={},
+    execution_time_ms=50.0,
+    correlation_id='req-002',
+    rules_evaluated=0,
+    rules_matched=0,
+    error="Configuration file not found",
+    error_code="CONFIG_NOT_FOUND"
+)
+
+# Query execution history
+recent_executions = history.get_recent_executions(limit=10)
+failed_executions = history.get_failed_executions(limit=5)
+```
+
+## Configuration Management
+
+### Repository Pattern
+```python
+from common.repository.config_repository import ConfigRepository
+from common.repository.file_repository import FileConfigRepository
+from common.repository.s3_repository import S3ConfigRepository
+
+# Use file repository (default)
+file_repo = FileConfigRepository(base_path='data/input')
+rules_config = file_repo.load_rules_config()
+
+# Use S3 repository
+s3_repo = S3ConfigRepository(bucket='config-bucket', prefix='rules/')
+rules_config = s3_repo.load_rules_config()
+
+# Use config repository with fallback
+repo = ConfigRepository()
+repo.add_repository(s3_repo, priority=1)      # Try S3 first
+repo.add_repository(file_repo, priority=2)    # Fallback to file
+rules_config = repo.load_rules_config()  # Tries S3, falls back to file
+```
+
+### Configuration Loader (Cached)
+```python
+from common.config_loader import get_config_loader
+
+# Get singleton config loader (cached)
+config_loader = get_config_loader()
+
+# Load configurations (cached automatically)
+rules = config_loader.load_rules_set()        # Cached for performance
+actions = config_loader.load_actions_set()    # Cached for performance
+conditions = config_loader.load_conditions_set()  # Cached for performance
+
+# Force refresh cache
+config_loader.clear_cache()
+rules = config_loader.load_rules_set()  # Fresh load
+```
+
+## Security Guidelines
+
+### Input Validation
+```python
+from pathlib import Path
+from common.exceptions import DataValidationError
+
+def validate_file_path(file_path: str, allowed_dir: str) -> Path:
+    """
+    Validate file path to prevent directory traversal attacks.
+
+    Args:
+        file_path: User-provided file path
+        allowed_dir: Allowed base directory
+
+    Returns:
+        Validated Path object
+
+    Raises:
+        DataValidationError: If path is invalid or outside allowed directory
+    """
+    # Convert to Path object
+    path = Path(file_path)
+
+    # Resolve to absolute path
+    if not path.is_absolute():
+        path = Path(allowed_dir) / path
+
+    # Resolve symlinks and normalize
+    resolved = path.resolve()
+    allowed = Path(allowed_dir).resolve()
+
+    # Check if path is within allowed directory
+    try:
+        resolved.relative_to(allowed)
+    except ValueError:
+        raise DataValidationError(
+            f"Path outside allowed directory: {file_path}",
+            error_code="INVALID_PATH",
+            context={'file_path': file_path, 'allowed_dir': allowed_dir}
+        )
+
+    return resolved
+```
+
+### Secrets Management
+```python
+from common.secrets_manager import get_secret, get_secrets_manager
+
+# Get single secret
+api_key = get_secret('api_key')
+
+# Get all secrets from manager
+secrets_manager = get_secrets_manager()
+db_password = secrets_manager.get_secret('database/password')
+api_credentials = secrets_manager.get_secret('api/credentials')
+
+# Refresh secrets
+secrets_manager.refresh_secrets()
+```
+
+### API Authentication
+```python
+from api.middleware.auth import AuthenticationMiddleware
+from fastapi import Depends, HTTPException, status
+from fastapi.security import APIKeyHeader
+
+api_key_header = APIKeyHeader(name='X-API-Key', auto_error=False)
+
+async def verify_api_key(api_key: str = Depends(api_key_header)):
+    """Verify API key from request header."""
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key required"
+        )
+
+    # Validate API key (use secrets manager)
+    valid_keys = get_secret('api_keys')
+    if api_key not in valid_keys:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid API key"
+        )
+
+    return api_key
+```
+
+## Dependency Injection
+
+### Container Pattern
+```python
+from common.di.container import Container
+from common.di.factory import create_handler
+
+# Create DI container
+container = Container()
+
+# Register services
+container.register('config_loader', ConfigLoader)
+container.register('rule_engine', RuleEngine)
+container.register('workflow_handler', WorkflowHandler)
+
+# Resolve dependencies
+config_loader = container.get('config_loader')
+rule_engine = container.get('rule_engine')
+
+# Factory pattern for handlers
+new_handler = create_handler(stage='NEW')
+progress_handler = create_handler(stage='INPROGESS')
+finished_handler = create_handler(stage='FINISHED')
+```
+
+### Chain of Responsibility Pattern
+```python
+from domain.handler.base_handler import BaseHandler
+from domain.handler.new_handler import NewHandler
+from domain.handler.inprogress_handler import InprogressHandler
+from domain.handler.finished_handler import FinishedHandler
+from domain.handler.default_handler import DefaultHandler
+
+# Build handler chain
+new_handler = NewHandler()
+progress_handler = InprogressHandler()
+finished_handler = FinishedHandler()
+default_handler = DefaultHandler()
+
+# Link handlers
+new_handler.set_next(progress_handler)
+progress_handler.set_next(finished_handler)
+finished_handler.set_next(default_handler)
+
+# Process through chain
+result = new_handler.handle(stage='NEW', data=data)
+```
+
+## Common Pitfalls to Avoid
+
+### 1. Import Issues
+```python
+# ❌ Bad: Wildcard imports
+from common.exceptions import *
+
+# ✅ Good: Explicit imports
+from common.exceptions import DataValidationError, ConfigurationError
+
+# ❌ Bad: Circular imports
+# file_a.py
+from file_b import something
+
+# ✅ Good: Import at function level or use TYPE_CHECKING
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from file_b import Something
+```
+
+### 2. Logging Issues
+```python
+# ❌ Bad: Using print statements
+print(f"Processing rule: {rule_id}")
+
+# ✅ Good: Using structured logging
+logger.info("Processing rule", rule_id=rule_id)
+
+# ❌ Bad: String formatting in log messages
+logger.info(f"Rule {rule_id} processed with {points} points")
+
+# ✅ Good: Structured fields
+logger.info("Rule processed", rule_id=rule_id, points=points)
+```
+
+### 3. Exception Handling Issues
+```python
+# ❌ Bad: Bare except clause
+try:
+    result = operation()
+except:
+    pass
+
+# ✅ Good: Specific exception handling
+try:
+    result = operation()
+except ValueError as e:
+    logger.error("Invalid value", error=str(e))
+    raise
+except Exception as e:
+    logger.error("Unexpected error", error=str(e), exc_info=True)
+    raise
+
+# ❌ Bad: Swallowing exceptions
+try:
+    result = operation()
+except Exception:
+    return None
+
+# ✅ Good: Preserve exception chain
+try:
+    result = operation()
+except FileNotFoundError as e:
+    raise ConfigurationError(f"Config not found") from e
+```
+
+### 4. DMN Execution Issues
+```python
+# ❌ Bad: Breaking before tracking evaluation
+if rule_matched and hit_policy == 'UNIQUE':
+    break  # This causes matched rule to not appear in would_match
+
+if dry_run:
+    rule_evaluations.append(evaluation)  # Never reached
+
+# ✅ Good: Track evaluation before breaking
+if dry_run:
+    rule_evaluations.append(evaluation)  # Track first
+
+if rule_matched and hit_policy == 'UNIQUE':
+    break  # Break after tracking
+
+# ❌ Bad: Ignoring execution order
+for decision_id in decisions_metadata:
+    execute_decision(decision_id)  # Wrong order, dependencies not resolved
+
+# ✅ Good: Using dependency-based execution order
+execution_order = result['execution_order']  # From DMN parser
+for decision_id in execution_order:
+    execute_decision(decision_id)  # Correct order, dependencies resolved
+```
+
+### 5. Type Hint Issues
+```python
+# ❌ Bad: Missing type hints
+def process_data(data):
+    return calculate_result(data)
+
+# ✅ Good: Complete type hints
+def process_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    return calculate_result(data)
+
+# ❌ Bad: Using built-in types
+def get_rules() -> list:
+    return []
+
+# ✅ Good: Using typing module
+from typing import List, Dict, Any
+
+def get_rules() -> List[Dict[str, Any]]:
+    return []
+```
+
+### 6. Configuration Issues
+```python
+# ❌ Bad: Hard-coded paths
+rules = read_json_file('data/input/rules_config.json')
+
+# ✅ Good: Using configuration
+from common.config import get_config
+config = get_config()
+rules = read_json_file(config.rules_config_path)
+
+# ❌ Bad: Hard-coded credentials
+api_key = "sk-1234567890abcdef"
+
+# ✅ Good: Using secrets manager
+from common.secrets_manager import get_secret
+api_key = get_secret('api_key')
+```
+
+### 7. Performance Issues
+```python
+# ❌ Bad: Loading config on every call
+def execute_rules(data):
+    rules = load_rules_from_file()  # Loads every time
+    return process_rules(rules, data)
+
+# ✅ Good: Using cached config loader
+from common.config_loader import get_config_loader
+config_loader = get_config_loader()
+
+def execute_rules(data):
+    rules = config_loader.load_rules_set()  # Cached
+    return process_rules(rules, data)
+
+# ❌ Bad: N+1 queries in loop
+for rule in rules:
+    config = load_config(rule.config_id)  # Loads multiple times
+
+# ✅ Good: Batch loading
+configs = load_all_configs([r.config_id for r in rules])
+for rule in rules:
+    config = configs[rule.config_id]
+```
+
+### 8. Testing Issues
+```python
+# ❌ Bad: No test markers
+def test_rules_exec():
+    pass
+
+# ✅ Good: Using test markers
+@pytest.mark.unit
+def test_rules_exec_with_valid_data():
+    pass
+
+# ❌ Bad: Missing assertions
+def test_rules_exec():
+    result = rules_exec(data)
+
+# ✅ Good: Clear assertions
+def test_rules_exec_returns_expected_results():
+    data = {'issue': 35}
+    result = rules_exec(data)
+    assert 'total_points' in result
+    assert result['total_points'] > 0
+```
+
+## Code Review Checklist
+
+Before submitting code for review, ensure:
+
+- [ ] **Type hints** added to all public functions and methods
+- [ ] **Docstrings** added/updated (Google style) for public functions
+- [ ] **Tests** added/updated with 90%+ coverage for new code
+- [ ] **No print() statements** - use `logger` instead
+- [ ] **No wildcard imports** - use explicit imports
+- [ ] **No bare except clauses** - catch specific exceptions
+- [ ] **Custom exceptions** used appropriately with error codes
+- [ ] **Follows project structure** - code in correct layer
+- [ ] **No hard-coded values** - use configuration or constants
+- [ ] **Structured logging** added for critical operations
+- [ ] **Error handling** is appropriate with exception chaining
+- [ ] **Code formatted** with Black (100 char line length)
+- [ ] **Imports organized** (standard, third-party, local)
+- [ ] **DMN rule evaluation tracking** happens before break statements (hit policies)
+- [ ] **DMN decision outputs** are properly mapped and added to data context
+- [ ] **DMN execution order** follows dependency order from parser
+- [ ] **Dry-run mode** correctly populates all fields (rule_evaluations, would_match, would_not_match)
+- [ ] **Correlation IDs** used for request tracing
+- [ ] **Security validated** - no directory traversal, SQL injection, etc.
+- [ ] **Performance considered** - caching, batching, indexing
+- [ ] **Backward compatibility** maintained (or breaking change documented)
+- [ ] **Documentation updated** if API or behavior changed
+
+## Tools & Commands
+
+### Development Workflow
+```bash
+# Setup virtual environment
+python -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+# or
+.venv\Scripts\activate     # Windows
+
+# Install dependencies
+pip install -r requirements.txt      # Production dependencies
+pip install -r requirements-dev.txt  # Development dependencies
+
+# Run tests
+pytest                              # All tests
+pytest -m unit                      # Unit tests only
+pytest -m integration               # Integration tests only
+pytest -m "not slow"                # Skip slow tests
+pytest --cov=. --cov-report=html   # With coverage report
+pytest -v -s                        # Verbose with stdout
+
+# Code quality
+black .                             # Format code
+flake8 .                            # Lint code
+pylint .                            # Advanced linting
+mypy .                              # Type checking
+
+# Run API server
+python run_api.py                   # Development server
+uvicorn api.main:app --reload       # With hot reload
+uvicorn api.main:app --host 0.0.0.0 --port 8000  # Production
+
+# Build documentation
+cd docs
+make html
+# Open docs/_build/html/index.html
+
+# AWS Lambda deployment
+./build-image.sh                    # Build Docker image
+./build-docker-image.sh            # Build Lambda deployment package
+
+# Git workflow
+git add .
+git commit -m "feat: Add DMN dependency resolution"
+git push origin main
+```
+
+### Configuration Files
+- **pyproject.toml**: Project metadata, tool configurations (Black, pytest, etc.)
+- **pytest.ini**: Pytest configuration (markers, test paths)
+- **mypy.ini**: Type checking configuration
+- **.env**: Environment variables (not committed)
+- **requirements.txt**: Production dependencies
+- **requirements-dev.txt**: Development dependencies
+
+## Project-Specific Patterns
+
+### Rule Execution with Correlation ID
+```python
+import uuid
 from services.ruleengine_exec import rules_exec
 
-result = rules_exec(data, dry_run=False)
-# Returns: {'total_points': float, 'pattern_result': str, 'action_recommendation': str}
+correlation_id = str(uuid.uuid4())
 
-# With dry_run=True for detailed evaluation
-result = rules_exec(data, dry_run=True)
-# Returns: {
-#     'total_points': float,
-#     'pattern_result': str,
-#     'action_recommendation': str,
-#     'rule_evaluations': List[Dict],  # All evaluated rules
-#     'would_match': List[Dict],        # Rules that matched
-#     'would_not_match': List[Dict],   # Rules that didn't match
-#     'dry_run': True
-# }
+result = rules_exec(
+    data={'issue': 35, 'title': 'Superman'},
+    dry_run=False,
+    correlation_id=correlation_id
+)
+
+# All logs will include correlation_id for tracing
+logger.info("Processing complete",
+           correlation_id=correlation_id,
+           total_points=result['total_points'])
 ```
 
 ### Workflow Execution Pattern
 ```python
 from services.workflow_exec import wf_exec
 
+# Execute multi-stage workflow
 result = wf_exec(
-    process_name='process_1',
+    process_name='ticket_processing',
     ls_stages=['NEW', 'INPROGESS', 'FINISHED'],
-    data={'id': 1, 'name': 'John'}
+    data={
+        'ticket_id': 'TICK-123',
+        'title': 'Issue Report',
+        'priority': 'high'
+    }
 )
+
+# Result contains processed data from all stages
 ```
 
-### Configuration Loading
+### DMN with Vietnamese Content (Tương Sinh Tương Khắc)
 ```python
-from common.config_loader import rules_set_cfg_read
-from common.repository.config_repository import ConfigRepository
-
-# Use cached configuration loader
-rules = rules_set_cfg_read()
-
-# Or use repository pattern for flexible sources
-repo = ConfigRepository()
-config = repo.load_rules_config()
-```
-
-### Dependency Injection
-```python
-from common.di.container import Container
-from common.di.factory import create_handler
-
-# Use DI container for testability
-container = Container()
-handler = container.get('workflow_handler')
-```
-
-### DMN Rules Execution Pattern
-```python
-from services.ruleengine_exec import dmn_rules_exec
-
-# Execute DMN rules from file
+# Example: Vietnamese Five Elements DMN execution
 result = dmn_rules_exec(
-    dmn_file='data/input/sample_rules.dmn',
-    data={'can': 'binh', 'chi': 'ty'},
-    dry_run=True,
-    correlation_id='req-001'
+    dmn_file='Tương Sinh Tương Khắc.dmn',
+    data={
+        'can': 'Giáp',     # Heavenly Stem
+        'chi': 'Tý'        # Earthly Branch
+    },
+    dry_run=True
 )
-# Returns: {
-#     'total_points': float,
-#     'pattern_result': str,
-#     'action_recommendation': str,
-#     'decision_outputs': Dict[str, Any],  # Mapped decision outputs
-#     'rule_evaluations': List[Dict],      # All evaluated rules (dry_run only)
-#     'would_match': List[Dict],           # Rules that matched (dry_run only)
-#     'would_not_match': List[Dict],       # Rules that didn't match (dry_run only)
-#     'dry_run': True
-# }
 
-# Or from XML content
-result = dmn_rules_exec(
-    dmn_content='<definitions>...</definitions>',
-    data={'field': 'value'},
-    dry_run=False
-)
+# Result includes:
+# - element_1: Element from Heavenly Stem (e.g., 'Mộc' - Wood)
+# - element_2: Element from Earthly Branch (e.g., 'Thủy' - Water)
+# - relationship: Five Elements relationship (e.g., 'Tương Sinh' - Generating)
+decision_outputs = result['decision_outputs']
+print(f"Element 1: {decision_outputs['element_1']}")
+print(f"Element 2: {decision_outputs['element_2']}")
+print(f"Relationship: {decision_outputs.get('relationship', 'N/A')}")
 ```
-
-### DMN Execution with Dependency Ordering
-- DMN decisions are executed in dependency order (determined by `informationRequirement`)
-- Each decision's outputs are mapped to input field names and added to data context
-- Dependent decisions can use outputs from previous decisions
-- Hit policies (UNIQUE/FIRST) stop evaluation after first match
-- **CRITICAL**: When tracking rule evaluations in dry-run mode, always add evaluation BEFORE breaking on hit policy
-
-## When Making Changes
-
-### Before Changing Code
-1. Understand the existing code structure
-2. Check if similar functionality exists elsewhere
-3. Review related tests
-4. Check CODE_QUALITY_BACKLOG.md for related issues
-
-### During Changes
-1. Maintain backward compatibility when possible
-2. Add type hints to new/modified functions
-3. Add/update docstrings
-4. Update tests to cover new functionality
-5. Run linters and fix issues
-6. Replace print() with proper logging
-7. When modifying rule evaluation loops with hit policies, ensure rule evaluation tracking happens before any break statements
-8. For DMN execution, verify that decision outputs are properly mapped and added to data context for dependent decisions
-
-### After Changes
-1. Run tests: `pytest`
-2. Check coverage: `pytest --cov=. --cov-report=html`
-3. Run linters: `flake8 .`, `pylint .`, `mypy .`
-4. Format code: `black .`
-5. Update documentation if needed
-
-## Code Review Checklist
-- [ ] Type hints added
-- [ ] Docstrings added/updated
-- [ ] Tests added/updated (90%+ coverage)
-- [ ] No print() statements (use logger)
-- [ ] No wildcard imports
-- [ ] No bare except clauses
-- [ ] Uses custom exceptions appropriately
-- [ ] Follows project structure
-- [ ] No hard-coded values
-- [ ] Logging added for critical operations
-- [ ] Error handling is appropriate
-- [ ] Code formatted with Black
-- [ ] Rule evaluation tracking happens before break statements (for hit policies)
-- [ ] DMN decision outputs are properly mapped and added to data context
-- [ ] Dry-run mode correctly populates `rule_evaluations`, `would_match`, and `would_not_match`
-
-## Tools & Commands
-
-### Development
-```bash
-# Run tests
-pytest
-pytest -m unit
-pytest --cov=. --cov-report=html
-
-# Linting
-flake8 .
-pylint .
-mypy .
-
-# Formatting
-black .
-
-# Type checking
-mypy .
-```
-
-### Configuration
-- `pyproject.toml`: Project configuration, tool settings
-- `pytest.ini`: Pytest configuration
-- `mypy.ini`: Type checking configuration
 
 ## Known Issues to Address
-Refer to `CODE_QUALITY_BACKLOG.md` for:
-- P0 (Critical) issues that need immediate attention
-- P1 (High) priority improvements
-- Code quality improvement suggestions
 
-**Priority areas**:
+Refer to `CODE_QUALITY_BACKLOG.md` for detailed improvement tasks:
+
+**P0 (Critical)** - Fix immediately:
 - Replace all print() statements with logging
-- Replace bare except clauses
+- Replace bare except clauses with specific exceptions
 - Add error handling to S3/JSON operations
 - Remove wildcard imports
-- Add type hints throughout
-- Remove commented code
 
-## Notes
-- The `archive/` directory contains legacy code - don't modify unless needed
-- The `layers/` directory is for AWS Lambda layers - typically not modified directly
-- Configuration files in `data/input/` should be versioned (rules_config_v4.json)
-- API routes are in `api/routes/` with middleware in `api/middleware/`
+**P1 (High)** - Fix soon:
+- Add type hints throughout codebase
+- Remove commented code blocks
+- Improve test coverage (target 90%+)
+- Add input validation to all public APIs
 
-## Common Pitfalls to Avoid
-1. **Wildcard imports**: Use explicit imports
-2. **Print statements**: Use structured logging
-3. **Bare except clauses**: Catch specific exceptions
-4. **Hard-coded paths**: Use configuration management
-5. **Missing type hints**: Add type hints to all public functions
-6. **No error handling**: Use custom exceptions with proper error messages
-7. **Breaking changes**: Maintain backward compatibility when possible
-8. **No tests**: Always add tests for new functionality
-9. **Rule evaluation tracking order**: When using hit policies (UNIQUE/FIRST) with dry-run mode, always track rule evaluations BEFORE breaking out of loops. Breaking before tracking causes matched rules to be missing from `would_match` array.
-10. **DMN execution order**: Ensure decisions are executed in dependency order. Check `execution_order` from DMN parser before executing decisions.
+**P2 (Medium)** - Schedule for future:
+- Refactor large functions (>50 lines)
+- Extract magic numbers to constants
+- Improve error messages with context
+- Add performance benchmarks
 
+## Directory-Specific Notes
+
+- **archive/**: Legacy code - don't modify unless necessary, consider for deletion
+- **layers/**: AWS Lambda layers - typically not modified directly, auto-generated
+- **data/input/**: Rule configurations (JSON/DMN) - version files (e.g., rules_config_v4.json)
+- **api/routes/**: FastAPI route handlers - one router per resource
+- **api/middleware/**: Custom middleware - logging, auth, error handling
+- **common/di/**: Dependency injection - container and factory patterns
+- **common/pattern/**: Design patterns - Chain of Responsibility
+- **common/repository/**: Repository pattern - file, S3, multi-source
+- **domain/handler/**: Workflow handlers - chain of responsibility
+- **tests/fixtures/**: Test data and sample files
+
+## Commit Message Convention
+
+Use conventional commits format:
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types**:
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, no logic change)
+- `refactor`: Code refactoring (no feature or bug fix)
+- `perf`: Performance improvements
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks (dependencies, build, etc.)
+
+**Examples**:
+```
+feat(dmn): Add support for DMN 1.3 specification
+
+Implement parser support for DMN 1.3 namespaces and new FEEL expressions.
+Includes dependency resolution using informationRequirement elements.
+
+Closes #123
+```
+
+```
+fix(api): Fix DMN execution with missing outputs
+
+Ensure decision outputs are properly mapped even when empty.
+Add validation for output field mapping.
+
+Fixes #456
+```
+
+## Additional Resources
+
+- **README.MD**: Project overview and quick start
+- **API_DOCUMENTATION.md**: Detailed API documentation
+- **DMN_PARSER_FEATURE.md**: DMN parser feature documentation
+- **DMN_DEPENDENCY_RESOLUTION_SPEC.md**: DMN dependency resolution specification
+- **DMN_RULES_EXECUTION_API_SPEC.md**: DMN execution API specification
+- **CODE_QUALITY_BACKLOG.md**: Known issues and improvement tasks
+- **CONTRIBUTING.md**: Contribution guidelines
+- **ARCHITECTURE_IMPROVEMENTS.md**: Architecture improvement proposals
+- **PRODUCTION_IMPROVEMENTS.md**: Production readiness improvements
+
+---
+
+**Last Updated**: 2026-01-31
+**Version**: 2.0.0
+**Maintained By**: Rule Engine Team
