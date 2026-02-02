@@ -176,8 +176,8 @@ class Rule(Base):
     rule_point: Mapped[int] = mapped_column(Integer, default=0)
     priority: Mapped[int] = mapped_column(Integer, default=0)
 
-    # Action result
-    action_result: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Action result (recommendation text; 500 allows long descriptions)
+    action_result: Mapped[str] = mapped_column(String(500), nullable=False)
 
     # Status and version
     status: Mapped[str] = mapped_column(
@@ -645,8 +645,8 @@ class RuleVersion(Base):
     rule_point: Mapped[int] = mapped_column(Integer, default=0)
     priority: Mapped[int] = mapped_column(Integer, default=0)
 
-    # Action result
-    action_result: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Action result (recommendation text; 500 allows long descriptions)
+    action_result: Mapped[str] = mapped_column(String(500), nullable=False)
 
     # Status and version
     status: Mapped[str] = mapped_column(

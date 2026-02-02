@@ -43,6 +43,8 @@ def create_error_response(
     
     if isinstance(error, RuleEngineException):
         error_data = error.to_dict()
+    elif isinstance(error, StarletteHTTPException) and isinstance(getattr(error, 'detail', None), dict):
+        error_data = dict(error.detail)
     else:
         error_data = {
             'error_type': error.__class__.__name__,
@@ -74,14 +76,23 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         JSONResponse with error details
     """
     correlation_id = getattr(request.state, 'correlation_id', None)
-    is_404 = isinstance(exc, StarletteHTTPException) and getattr(exc, 'status_code', None) == 404
+    is_http_exc = isinstance(exc, StarletteHTTPException)
+    status_code = getattr(exc, 'status_code', None) if is_http_exc else None
 
-    if is_404:
-        logger.warning(
-            "Not found",
-            path=request.url.path,
-            correlation_id=correlation_id,
-        )
+    if is_http_exc and status_code is not None and status_code < 500:
+        if status_code == 404:
+            logger.warning(
+                "Not found",
+                path=request.url.path,
+                correlation_id=correlation_id,
+            )
+        else:
+            logger.warning(
+                "Client error response",
+                status_code=status_code,
+                path=request.url.path,
+                correlation_id=correlation_id,
+            )
     else:
         logger.error(
             "Unhandled exception in API",

@@ -157,8 +157,8 @@ class RuleManagementService:
             Created rule dictionary
 
         Raises:
-            DataValidationError: If rule data is invalid or rule ID already exists
-            ConfigurationError: If rule cannot be created
+            DataValidationError: If rule data is invalid
+            ConfigurationError: If rule cannot be created or updated
         """
         logger.debug("Creating rule", rule_id=rule_data.get("id"))
 
@@ -179,14 +179,11 @@ class RuleManagementService:
             )
 
         try:
-            # Check if rule already exists
+            # If rule already exists, update it (upsert semantics)
             existing_rule = self.get_rule(rule_id)
             if existing_rule:
-                raise DataValidationError(
-                    f"Rule with ID '{rule_id}' already exists",
-                    error_code="RULE_ID_EXISTS",
-                    context={"rule_id": rule_id},
-                )
+                logger.info("Rule exists, updating", rule_id=rule_id)
+                return self.update_rule(rule_id, rule_data)
 
             # Get ruleset ID
             ruleset_id = rule_data.get("ruleset_id")
