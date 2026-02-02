@@ -210,7 +210,9 @@ def _rule_dict_to_extrule_kwargs(
         attr = rule.get("attribute")
         equation = rule.get("condition")
         constant = rule.get("constant")
-        if attr is not None and equation is not None:
+        attr_str = (attr if attr is not None else "").strip() if attr is not None else ""
+        equation_str = (equation if equation is not None else "").strip() if equation is not None else ""
+        if attr_str and equation_str:
             constant_str = str(constant) if constant is not None else ""
             condition_id = None
             for cond in conditionss_set:
@@ -245,6 +247,17 @@ def _rule_dict_to_extrule_kwargs(
                 "action_result": rule.get("action_result", rule.get("result", "")),
             }
             return kwargs
+        if attr is not None or equation is not None or constant is not None:
+            raise RuleCompilationError(
+                "Rule has empty attribute or condition; cannot resolve. Fix or remove the rule.",
+                error_code="CONDITION_EMPTY",
+                context={
+                    "rule_name": rule.get("rule_name", rule.get("rulename", "unknown")),
+                    "attribute": attr,
+                    "condition": equation,
+                    "constant": constant,
+                },
+            )
     # Structured format: only pass keys ExtRule accepts (with aliases)
     raw_type = rule.get("type", "simple")
     if raw_type == "standard":
