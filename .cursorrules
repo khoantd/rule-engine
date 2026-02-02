@@ -23,12 +23,16 @@ rule_engine/
 │   ├── dmn_parser.py   # DMN XML parser with dependency resolution
 │   ├── rule_engine_util.py  # Core rule utilities and FEEL expression evaluation
 │   ├── config_loader.py     # Cached configuration loader
+│   ├── config.py            # Configuration and env loading
+│   ├── db_connection.py     # Database connection and session management
+│   ├── db_migrations.py     # Migration helpers
+│   ├── db_models.py         # SQLAlchemy ORM models
 │   ├── metrics.py           # CloudWatch metrics tracking
 │   ├── execution_history.py # Execution history tracking
 │   ├── cache.py             # Caching utilities (LRU, TTL, file-based)
 │   ├── di/                  # Dependency injection container
 │   ├── pattern/             # Design patterns (Chain of Responsibility)
-│   └── repository/          # Configuration repository pattern
+│   └── repository/          # Config + DB repository pattern
 ├── domain/              # Business logic and domain models
 │   ├── rules/          # Rule domain objects
 │   ├── actions/        # Action domain objects
@@ -37,12 +41,20 @@ rule_engine/
 │   └── ticket/         # Ticket domain objects
 ├── services/           # High-level services
 │   ├── ruleengine_exec.py  # Rule execution engine (JSON + DMN)
-│   └── workflow_exec.py    # Workflow orchestration
+│   ├── workflow_exec.py    # Workflow orchestration
+│   ├── rule_management.py  # Rule CRUD and listing
+│   ├── ruleset_management.py # Ruleset CRUD
+│   ├── actions_management.py  # Actions CRUD
+│   └── conditions_management.py # Conditions CRUD
 ├── api/                # FastAPI REST API layer
 │   ├── main.py         # FastAPI application with middleware
 │   ├── models.py       # Pydantic models for request/response
 │   ├── routes/         # API route handlers
 │   └── middleware/     # Custom middleware (auth, logging, errors)
+├── migrations/         # Alembic database migrations
+│   ├── env.py          # Alembic environment
+│   └── versions/       # Migration scripts
+├── frontend/           # Frontend app (TypeScript/React)
 ├── tests/              # Test suite (unit, integration)
 │   ├── unit/           # Fast, isolated unit tests
 │   └── integration/    # Integration tests
@@ -1441,12 +1453,15 @@ Refer to `CODE_QUALITY_BACKLOG.md` for detailed improvement tasks:
 
 - **archive/**: Legacy code - don't modify unless necessary, consider for deletion
 - **layers/**: AWS Lambda layers - typically not modified directly, auto-generated
+- **migrations/**: Alembic migrations - run `alembic upgrade head` to apply; create new via `alembic revision`
+- **common/db_*.py**, **common/repository/db_repository.py**: Database connection, models, and repository - use for persistence; see DATABASE_QUICKSTART.md
+- **frontend/**: TypeScript/React UI - separate build; do not import API layer into frontend
 - **data/input/**: Rule configurations (JSON/DMN) - version files (e.g., rules_config_v4.json)
 - **api/routes/**: FastAPI route handlers - one router per resource
 - **api/middleware/**: Custom middleware - logging, auth, error handling
 - **common/di/**: Dependency injection - container and factory patterns
 - **common/pattern/**: Design patterns - Chain of Responsibility
-- **common/repository/**: Repository pattern - file, S3, multi-source
+- **common/repository/**: Repository pattern - file, S3, DB, multi-source
 - **domain/handler/**: Workflow handlers - chain of responsibility
 - **tests/fixtures/**: Test data and sample files
 
@@ -1494,6 +1509,7 @@ Fixes #456
 
 - **README.MD**: Project overview and quick start
 - **API_DOCUMENTATION.md**: Detailed API documentation
+- **DATABASE_QUICKSTART.md**, **DATABASE_INTEGRATION.md**: Database setup and integration
 - **DMN_PARSER_FEATURE.md**: DMN parser feature documentation
 - **DMN_DEPENDENCY_RESOLUTION_SPEC.md**: DMN dependency resolution specification
 - **DMN_RULES_EXECUTION_API_SPEC.md**: DMN execution API specification
@@ -1504,6 +1520,6 @@ Fixes #456
 
 ---
 
-**Last Updated**: 2026-01-31
+**Last Updated**: 2026-02-01
 **Version**: 2.0.0
 **Maintained By**: Rule Engine Team

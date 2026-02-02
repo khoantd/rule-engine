@@ -7,7 +7,8 @@ A flexible and extensible rule engine for evaluating business rules and workflow
 - **Rule Evaluation**: Execute business rules with priority-based ordering and weighted scoring
 - **Pattern Matching**: Define action patterns for complex decision-making
 - **Workflow Orchestration**: Chain workflow handlers using Chain of Responsibility pattern
-- **Configuration Management**: Load rules from JSON files or AWS S3
+- **Configuration Management**: Load rules from JSON files, AWS S3, or PostgreSQL/TimescaleDB
+- **Tiger Cloud Integration**: Store and manage rules in TimescaleDB database
 - **AWS Lambda Support**: Ready-to-use Lambda handler for serverless deployments
 - **Dependency Injection**: Flexible DI container for testability and extensibility
 - **Structured Logging**: Comprehensive logging with correlation IDs
@@ -22,6 +23,7 @@ A flexible and extensible rule engine for evaluating business rules and workflow
 - [Configuration](#configuration)
 - [Usage Examples](#usage-examples)
 - [API Reference](#api-reference)
+- [Database Integration](#database-integration)
 - [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
@@ -579,6 +581,85 @@ make html
 
 The HTML documentation will be generated in `docs/_build/html/`. **Note**: Ensure your virtual environment is activated and Sphinx is installed before building.
 
+## Database Integration
+
+The Rule Engine supports storing and managing rules in a Tiger Cloud (TimescaleDB/PostgreSQL) database. This provides persistent storage, versioning, and multi-tenancy support.
+
+### Quick Setup
+
+```bash
+# Install database dependencies
+pip install -r requirements.txt
+
+# Run setup with Tiger Cloud credentials
+python3 setup_database.py --env-file /path/to/tiger-cloud-credentials.env
+```
+
+This will:
+- Test database connection
+- Create database schema
+- Create sample ruleset and rules
+- Verify setup
+
+### Enable Database Storage
+
+Set environment variable:
+
+```bash
+export USE_DATABASE=true
+export TIMESCALE_SERVICE_URL=postgres://user:password@host:port/db?sslmode=require
+```
+
+### Using Database Repository
+
+```python
+from common.repository.config_repository import get_config_repository
+
+# Automatically uses database if USE_DATABASE=true
+repo = get_config_repository()
+
+# Read rules from database
+rules = repo.read_rules_set()
+patterns = repo.read_patterns()
+```
+
+### Creating Rules in Database
+
+```python
+from common.repository.db_repository import RulesetRepository, RuleRepository
+
+# Create ruleset
+ruleset_repo = RulesetRepository()
+ruleset = ruleset_repo.create_ruleset(
+    name="credit_scoring",
+    description="Credit scoring rules",
+    is_default=True
+)
+
+# Create rule
+rule_repo = RuleRepository()
+rule = rule_repo.create_rule(
+    rule_id="CREDIT_001",
+    rule_name="High Credit Score",
+    attribute="credit_score",
+    condition="greater_than",
+    constant="700",
+    ruleset_id=ruleset.id,
+    rule_point=100,
+    priority=1,
+    action_result="Y"
+)
+```
+
+### Storage Backend Priority
+
+The rule engine automatically selects storage backend:
+1. **Database** (if `USE_DATABASE=true` and `DATABASE_URL` is set)
+2. **S3** (if `S3_BUCKET` is configured)
+3. **File System** (default)
+
+For detailed documentation, see [DATABASE_QUICKSTART.md](DATABASE_QUICKSTART.md) or [DATABASE_INTEGRATION.md](DATABASE_INTEGRATION.md).
+
 ## Development
 
 ### Running Tests
@@ -641,6 +722,8 @@ MIT License - See LICENSE file for details
 - [Configuration Management](CONFIGURATION_MANAGEMENT.md)
 - [Production Improvements](PRODUCTION_IMPROVEMENTS.md)
 - [Code Quality Backlog](CODE_QUALITY_BACKLOG.md)
+- [Database Integration Quick Start](DATABASE_QUICKSTART.md)
+- [Database Integration Documentation](DATABASE_INTEGRATION.md)
 
 ## Support
 

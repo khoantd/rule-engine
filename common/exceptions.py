@@ -60,6 +60,11 @@ class RuleCompilationError(RuleEngineException):
     pass
 
 
+class RuleValidationError(RuleEngineException):
+    """Raised when rule validation fails (structure, syntax, or dependency)."""
+    pass
+
+
 class ConditionError(RuleEngineException):
     """Raised when condition evaluation fails."""
     pass

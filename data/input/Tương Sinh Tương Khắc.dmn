@@ -420,8 +420,9 @@
         </inputExpression>
       </input>
       <output id="OutputClause_0nnbw4g" label="can_chi" name="can_chi" typeRef="string" />
-      <output id="OutputClause_0j6gxa9" label="can_chi score" name="can_chi_score" typeRef="string" />
+      <output id="OutputClause_0j6gxa9" label="can_chi_score" name="can_chi_score" typeRef="string" />
       <output id="OutputClause_1239i42" label="can_chi_yin_yang" name="can_chi_yin_yang" typeRef="string" />
+      <output id="OutputClause_0uixbzg" label="flag_stop_output" name="flag_stop_output" typeRef="string" />
       <rule id="DecisionRule_1srlgw5">
         <inputEntry id="UnaryTests_0kphc1w">
           <text>yin</text>
@@ -437,6 +438,9 @@
         </outputEntry>
         <outputEntry id="LiteralExpression_0f9nh92">
           <text>yin</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0ba0wf3">
+          <text>flag_stop</text>
         </outputEntry>
       </rule>
       <rule id="DecisionRule_0autmsu">
@@ -455,48 +459,1346 @@
         <outputEntry id="LiteralExpression_0bfbhud">
           <text>yang</text>
         </outputEntry>
+        <outputEntry id="LiteralExpression_0rwxno6">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="Decision_1bjk7mt" name="Nhap Mo">
+    <decisionTable id="DecisionTable_05743lw">
+      <input id="InputClause_0vr7o5j" label="dia_chi_1" camunda:inputVariable="dia_chi_1">
+        <inputExpression id="LiteralExpression_0zeg6z3" typeRef="string" />
+      </input>
+      <input id="InputClause_102jh2v" label="dia_chi_2" camunda:inputVariable="dia_chi_2">
+        <inputExpression id="LiteralExpression_130gnmy" typeRef="string">
+          <text></text>
+        </inputExpression>
+      </input>
+      <output id="OutputClause_1x43w4o" label="nhap_mo_output" name="nhap_mo_output" typeRef="string" />
+      <output id="OutputClause_1jrv1go" label="flag_stop_output" name="flag_stop_output" typeRef="string" />
+      <rule id="DecisionRule_1p7hdqe">
+        <inputEntry id="UnaryTests_1ocxqro">
+          <text>ty</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_18rucwl">
+          <text>thin</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_17yuio2">
+          <text>nhap_mo</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1eivzbo">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0mladj5">
+        <inputEntry id="UnaryTests_0x0law6">
+          <text>hoi</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_09fsnni">
+          <text>thin</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_04yt07h">
+          <text>nhap_mo</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_02jk41a">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1d45co3">
+        <inputEntry id="UnaryTests_015mahc">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1a2tiqc">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0j14tvt">
+          <text>nhap_mo</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0g7qgk3">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0pg163p">
+        <inputEntry id="UnaryTests_1372c9y">
+          <text>mao</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1slopsy">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1590vj8">
+          <text>nhap_mo</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0sd0mda">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0udjkdv">
+        <inputEntry id="UnaryTests_06w9tjj">
+          <text>ti</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1xor3xt">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0cqqady">
+          <text>nhap_mo</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_09qfyky">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_03gen9d">
+        <inputEntry id="UnaryTests_17nffq3">
+          <text>ngo</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1h5r3px">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0td2442">
+          <text>nhap_mo</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0ojh0xb">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_03j4ile">
+        <inputEntry id="UnaryTests_0dwxif4">
+          <text>than</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0112wah">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0hskf85">
+          <text>nhap_mo</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_12pqg3s">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0rm0p5c">
+        <inputEntry id="UnaryTests_0klazll">
+          <text>dau</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1wggd2w">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_10juvok">
+          <text>nhap_mo</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1o662oa">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="Decision_0dsv54y" name="Tam Hop">
+    <decisionTable id="DecisionTable_0id3ue0">
+      <input id="InputClause_1qroei9" label="dia_chi_1" camunda:inputVariable="dia_chi_1">
+        <inputExpression id="LiteralExpression_1v9dsbu" typeRef="string" />
+      </input>
+      <input id="InputClause_050negq" label="dia_chi_2" camunda:inputVariable="dia_chi_2">
+        <inputExpression id="LiteralExpression_1mrk5va" typeRef="string">
+          <text></text>
+        </inputExpression>
+      </input>
+      <output id="OutputClause_13t41yv" label="tam_hop_output" name="tam_hop_output" typeRef="string" />
+      <output id="OutputClause_1198ahr" label="flag_stop_output" name="flag_stop_output" typeRef="string" />
+      <rule id="DecisionRule_1jrxvq3">
+        <inputEntry id="UnaryTests_0hjassf">
+          <text>ty</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_171o4ab">
+          <text>than</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_13ih194">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1oex4kf">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1l3lrtz">
+        <inputEntry id="UnaryTests_0wbqsy7">
+          <text>ty</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_003q517">
+          <text>thin</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_193x4f5">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1llatgg">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_05x3lv1">
+        <inputEntry id="UnaryTests_1pxufxt">
+          <text>suu</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_123tzay">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0hcwwcy">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0e9lrao">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1ii867y">
+        <inputEntry id="UnaryTests_132wf7q">
+          <text>suu</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0e8hyce">
+          <text>dau</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0xy2z1w">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0vvcqfe">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0op1eg6">
+        <inputEntry id="UnaryTests_1cfe2y4">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_088nbby">
+          <text>ngo</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1i55b8f">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_12hedjz">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1ssajdx">
+        <inputEntry id="UnaryTests_1uirwhm">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_05rkrsr">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1731mmd">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1tag3uq">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0ppgmdr">
+        <inputEntry id="UnaryTests_1hu8d76">
+          <text>mao</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1iofiju">
+          <text>hoi</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_153jcar">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_15y4y8s">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1tz7r5z">
+        <inputEntry id="UnaryTests_18ktnvi">
+          <text>mao</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_134neqp">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0cm8vqq">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0lfxg9g">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1xlw21w">
+        <inputEntry id="UnaryTests_0qs0ncy">
+          <text>thin</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0sd9q2s">
+          <text>than</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0b6q0yy">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1vs7we3">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1bkjoqt">
+        <inputEntry id="UnaryTests_1x7oiup">
+          <text>thin</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1wij6if">
+          <text>ty</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0txukz7">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1afai5d">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1q1ed20">
+        <inputEntry id="UnaryTests_17uj0yn">
+          <text>ti</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1l8ll6j">
+          <text>dau</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0ezwef2">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0cxmowc">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_058x9en">
+        <inputEntry id="UnaryTests_0e5qrhr">
+          <text>ti</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0lt2ckl">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0j6k10h">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0r6gis7">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0sck7p5">
+        <inputEntry id="UnaryTests_14oojyt">
+          <text>ngo</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1s2piih">
+          <text>dan</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0b5auki">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1t3bpnl">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_00k0kay">
+        <inputEntry id="UnaryTests_1yisvg2">
+          <text>ngo</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_05vkemj">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1vvmy29">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0g5jj5w">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0b3knun">
+        <inputEntry id="UnaryTests_13a6sc1">
+          <text>mui</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_08w6ji8">
+          <text>hoi</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0qysjzw">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0ofnrgx">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0tq6v82">
+        <inputEntry id="UnaryTests_1evc93f">
+          <text>mui</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1n64ofz">
+          <text>mao</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_17ze0n0">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0ur97vv">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0soplwj">
+        <inputEntry id="UnaryTests_1ucteeu">
+          <text>than</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1lgzixt">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0hphmik">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0kh5hg4">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0a0spb7">
+        <inputEntry id="UnaryTests_1obh98f">
+          <text>than</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0dziozi">
+          <text>thin</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1ox06wg">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_11zw25p">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0jmxpt3">
+        <inputEntry id="UnaryTests_0jep5ir">
+          <text>dau</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0cqzcg4">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1q4ox1t">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_17782nx">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1iid4y9">
+        <inputEntry id="UnaryTests_0l2vrib">
+          <text>dau</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0nqt2qm">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1mzkifo">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0jrj5y0">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_19z1v4r">
+        <inputEntry id="UnaryTests_0izqt7o">
+          <text>tuat</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1lclk4y">
+          <text>dan</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_18x71ly">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1hta9ej">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1dqpqv6">
+        <inputEntry id="UnaryTests_18rhplg">
+          <text>tuat</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_135b9a1">
+          <text>ngo</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1wvs1rj">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0e9pwnm">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0ntxa2k">
+        <inputEntry id="UnaryTests_1tmj6x0">
+          <text>hoi</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_034jfkg">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1fgv6ow">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1hfms02">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1635dxh">
+        <inputEntry id="UnaryTests_02zojc5">
+          <text>hoi</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1i7inbx">
+          <text>mao</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0rwma4u">
+          <text>tam_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0u849h4">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="Decision_033t82z" name="Nhi Hop">
+    <decisionTable id="DecisionTable_0xbzywx">
+      <input id="InputClause_08say4p" label="dia_chi_1" camunda:inputVariable="dia_chi_1">
+        <inputExpression id="LiteralExpression_0n6sb9c" typeRef="string" />
+      </input>
+      <input id="InputClause_00vvrwn" label="dia_chi_2" camunda:inputVariable="dia_chi_2">
+        <inputExpression id="LiteralExpression_13bh8ka" typeRef="string">
+          <text></text>
+        </inputExpression>
+      </input>
+      <output id="OutputClause_0bs4o9w" label="nhi_hop_output" name="nhi_hop_output" typeRef="string" />
+      <output id="OutputClause_100cnx7" label="flag_stop_output" name="flag_stop_output" typeRef="string" />
+      <rule id="DecisionRule_1804wsk">
+        <inputEntry id="UnaryTests_17mt3cm">
+          <text>ty</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_11yo448">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1kfztpc">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1iwikdd">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0uhi6u3">
+        <inputEntry id="UnaryTests_0t2qf80">
+          <text>suu</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1g5ecb7">
+          <text>ty</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0mw2xao">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1pn5r7n">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0q5chpb">
+        <inputEntry id="UnaryTests_055bel0">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0oye7k8">
+          <text>hoi</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1kgfsqv">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0yshvwx">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0z1h1hc">
+        <inputEntry id="UnaryTests_1tfp26o">
+          <text>mao</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_08cvg30">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_05pmrly">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_09udvyu">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1pi49uf">
+        <inputEntry id="UnaryTests_1lwq7e5">
+          <text>thin</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1k9abth">
+          <text>dau</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0dl1riw">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0cipkiz">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1c6njd9">
+        <inputEntry id="UnaryTests_0m4x3vr">
+          <text>ti</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_18xmb1z">
+          <text>than</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1prlizo">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1lc3whr">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0vk1tbl">
+        <inputEntry id="UnaryTests_1lud1v4">
+          <text>ngo</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1mpftol">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0gc23yu">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0r9781d">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_103demz">
+        <inputEntry id="UnaryTests_12wd846">
+          <text>mui</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0cs0qvw">
+          <text>ngo</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1e3qj0j">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1v8972e">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_09j8tkk">
+        <inputEntry id="UnaryTests_0c9b2g7">
+          <text>than</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_09ujti2">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1ungkmy">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_124d0ih">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1yglz08">
+        <inputEntry id="UnaryTests_00c65e6">
+          <text>dau</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0aqpkqe">
+          <text>thin</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_080mqje">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_04lf8b7">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0iv0omy">
+        <inputEntry id="UnaryTests_0m1zerw">
+          <text>tuat</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_09z5i2n">
+          <text>mao</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0sbbfev">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1lx9s9d">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1oqysrt">
+        <inputEntry id="UnaryTests_1qls70k">
+          <text>hoi</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1fu1uk7">
+          <text>dan</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0qezon1">
+          <text>nhi_hop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_14o6ktt">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="Decision_07xsuxw" name="Tuong Xung">
+    <decisionTable id="DecisionTable_0a2mrb6">
+      <input id="InputClause_038js38" label="dia_chi_1" camunda:inputVariable="dia_chi_1">
+        <inputExpression id="LiteralExpression_08x4zxe" typeRef="string" />
+      </input>
+      <input id="InputClause_12xmwiy" label="dia_chi_2" camunda:inputVariable="dia_chi_2">
+        <inputExpression id="LiteralExpression_0y1n5t2" typeRef="string">
+          <text></text>
+        </inputExpression>
+      </input>
+      <output id="OutputClause_1umvqok" label="tuong_xung_output" typeRef="string" />
+      <output id="OutputClause_0cswkjf" label="flag_stop_output" name="flag_stop_stop" typeRef="string" />
+      <rule id="DecisionRule_1bmksvk">
+        <inputEntry id="UnaryTests_0kt482b">
+          <text>ty</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0kcrzxh">
+          <text>ngo</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_00wo7hn">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1cvohvj">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0dhz4rr">
+        <inputEntry id="UnaryTests_18rfozp">
+          <text>suu</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_10g3q8d">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0jjz5dp">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0ns1gnj">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0317deg">
+        <inputEntry id="UnaryTests_14cyshi">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1qcibdo">
+          <text>than</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_045wkzl">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_135u5mm">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0n8bt9l">
+        <inputEntry id="UnaryTests_1ih1vnm">
+          <text>mao</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0hf0lwd">
+          <text>dau</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0p1q18f">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1yog9a8">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_19x3jvo">
+        <inputEntry id="UnaryTests_122pq4z">
+          <text>thin</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0x47ysk">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_06xl326">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_10uieka">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1efhhwb">
+        <inputEntry id="UnaryTests_1m5r5ce">
+          <text>ti</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0cm0p7n">
+          <text>hoi</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_050kwft">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1oc8rjf">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0np3qcx">
+        <inputEntry id="UnaryTests_1ns9m1q">
+          <text>ngo</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1kevq51">
+          <text>ty</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_07lvp6r">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0d5pj86">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1sfx7rf">
+        <inputEntry id="UnaryTests_1p19wmr">
+          <text>mui</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_03svd0r">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0h71gs9">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_00azo1a">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1kg54sn">
+        <inputEntry id="UnaryTests_1qevaen">
+          <text>than</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1kjk3oh">
+          <text>dan</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_14n6g9c">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_158i6je">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1punygv">
+        <inputEntry id="UnaryTests_16ca5pb">
+          <text>dau</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_10zfmz0">
+          <text>mao</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1odzk4b">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_01hfg51">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0ij8xr2">
+        <inputEntry id="UnaryTests_04ass9h">
+          <text>tuat</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0lyuccx">
+          <text>thin</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_150fslp">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_10k9xjz">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1wn3woq">
+        <inputEntry id="UnaryTests_0cyx0w9">
+          <text>hoi</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1hfjl0z">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0qk3frp">
+          <text>tuong_xung</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0zerus9">
+          <text>flag_stop</text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="Decision_0a33edf" name="Lam Thai Tue">
+    <decisionTable id="DecisionTable_0lysfal">
+      <input id="InputClause_1xkmbhq" label="can_chi_1" camunda:inputVariable="can_chi_1">
+        <inputExpression id="LiteralExpression_0ra2715" typeRef="string" />
+      </input>
+      <input id="InputClause_1ktj5sn" label="can_chi_2" camunda:inputVariable="can_chi_2">
+        <inputExpression id="LiteralExpression_0aio7lw" typeRef="string">
+          <text></text>
+        </inputExpression>
+      </input>
+      <output id="OutputClause_1j5jetg" label="lam_thai_tue_output" typeRef="string" />
+      <output id="OutputClause_04f6106" label="flag_stop_output" typeRef="string" />
+      <output id="OutputClause_145ni48" label="lam_pha_tue_score" name="lam_pha_tue_score" typeRef="double" biodi:width="192" />
+      <rule id="DecisionRule_198hz8e">
+        <inputEntry id="UnaryTests_00a3mc4">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1i6pj3x">
+          <text>than</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0zzmfrb">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0hf1cks">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0vg2fra">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0lhson1">
+        <inputEntry id="UnaryTests_0ca54i7">
+          <text>ti</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1n0l4lr">
+          <text>hoi</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0q9mtq3">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0arjy6o">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1a1i8uu">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0q6lah3">
+        <inputEntry id="UnaryTests_17y92u3">
+          <text>thin</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1n82zyi">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_19qgidy">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_19vz2il">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0265n0h">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0woo0u6">
+        <inputEntry id="UnaryTests_12cbcgl">
+          <text>suu</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0mhi4jh">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0mictju">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1eu3jke">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1tk3igw">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1pz64ap">
+        <inputEntry id="UnaryTests_0z3w5vr">
+          <text>ty</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0ekgyix">
+          <text>mao</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0d4q5n8">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1xopmzu">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0q4h5lt">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0vs1e4p">
+        <inputEntry id="UnaryTests_1stpv6n">
+          <text>mao</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0yy0oss">
+          <text>ngo</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0n6zqx4">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0nx7k0v">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_07tsg15">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1fn8pud">
+        <inputEntry id="UnaryTests_0yuj4km">
+          <text>ngo</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0qkhjxl">
+          <text>ty</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1gzzfgk">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1nu7945">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1b73c1x">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1f1q5t3">
+        <inputEntry id="UnaryTests_023ji0v">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0xcycul">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1qmgp26">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0f2gdzm">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1tt9xql">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0etpgrh">
+        <inputEntry id="UnaryTests_0tvzmuw">
+          <text>ti</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1x392vw">
+          <text>than</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_06gqqnc">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1xawtkg">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0btnxx7">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_10o4vko">
+        <inputEntry id="UnaryTests_1t29yx4">
+          <text>than</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1v1l1my">
+          <text>dan</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1e43pxe">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_17p4dnc">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_18c7hj7">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1o5j08u">
+        <inputEntry id="UnaryTests_0z4afbu">
+          <text>suu</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1sl9w6x">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0ar9tom">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1szgpuc">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0q57evm">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0bfmibk">
+        <inputEntry id="UnaryTests_0f3pvgm">
+          <text>mui</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1w69mwg">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1kul1rd">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1pitu21">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0dh1a4k">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1nmfjyv">
+        <inputEntry id="UnaryTests_05uupcl">
+          <text>tuat</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_17rtep2">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0qd7zy6">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_14j9s3i">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1yhymzk">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_07zhtr6">
+        <inputEntry id="UnaryTests_09hg092">
+          <text>ty</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0tfvui8">
+          <text>mui</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1hv1ned">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0aykdkf">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0yihgnh">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0a7a6tw">
+        <inputEntry id="UnaryTests_0cp50jz">
+          <text>suu</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_18dssni">
+          <text>ngo</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1jyzodf">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_04gbkwz">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0fz0w0u">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0hbbgiq">
+        <inputEntry id="UnaryTests_0cdxipd">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_14ta0dd">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0sw1fqv">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1hfoode">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0ue8cog">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_07bvu4w">
+        <inputEntry id="UnaryTests_0bgmoco">
+          <text>mao</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1o7z0ao">
+          <text>than</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1g2vion">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1vg2f5v">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_065523v">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_01rv5wp">
+        <inputEntry id="UnaryTests_0dl6hxq">
+          <text>thin</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_106g964">
+          <text>hoi</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0xugnss">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0mu2zl2">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1eq8bov">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0w2ioj2">
+        <inputEntry id="UnaryTests_13qf8yz">
+          <text>dau</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_160xg5f">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0uis6o8">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_10u8e66">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0n3cbxp">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0vfc717">
+        <inputEntry id="UnaryTests_03tm12j">
+          <text>ty</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1vephd0">
+          <text>dau</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_046y3tz">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0phj5ix">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0ng2i83">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1elbc47">
+        <inputEntry id="UnaryTests_1pw98sd">
+          <text>mao</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0x9ka8e">
+          <text>ngua</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1b5svno">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0ijpt42">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1ai1g8y">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0dv5w9d">
+        <inputEntry id="UnaryTests_16907pw">
+          <text>thin</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_196yazm">
+          <text>suu</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_04nszsq">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1q5f3xu">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0aesr7a">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0q7ymia">
+        <inputEntry id="UnaryTests_0yt64h3">
+          <text>mui</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1g663hs">
+          <text>tuat</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_1huit7j">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_1tfseqe">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0m5vpem">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_0yxp7a4">
+        <inputEntry id="UnaryTests_1xu2m4q">
+          <text>dan</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_0tbfpti">
+          <text>hoi</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0jjyojo">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0tyclgm">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0gq18ff">
+          <text>0.25</text>
+        </outputEntry>
+      </rule>
+      <rule id="DecisionRule_1kdr8vb">
+        <inputEntry id="UnaryTests_0abfry8">
+          <text>than</text>
+        </inputEntry>
+        <inputEntry id="UnaryTests_1m7vdvf">
+          <text>ti</text>
+        </inputEntry>
+        <outputEntry id="LiteralExpression_0yijl7v">
+          <text>lam_thai_tue</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_0luqkxt">
+          <text>flag_stop</text>
+        </outputEntry>
+        <outputEntry id="LiteralExpression_07886bh">
+          <text>0.25</text>
+        </outputEntry>
       </rule>
     </decisionTable>
   </decision>
   <dmndi:DMNDI>
     <dmndi:DMNDiagram id="DMNDiagram_15ls9ox">
       <dmndi:DMNShape id="DMNShape_1aco0g2" dmnElementRef="Decision_0n3v7en">
-        <dc:Bounds height="80" width="180" x="350" y="310" />
+        <dc:Bounds height="80" width="180" x="350" y="1060" />
       </dmndi:DMNShape>
       <dmndi:DMNShape id="DMNShape_0x67pjw" dmnElementRef="Decision_0nq1td4">
-        <dc:Bounds height="80" width="180" x="130" y="80" />
+        <dc:Bounds height="80" width="180" x="130" y="830" />
       </dmndi:DMNShape>
       <dmndi:DMNShape id="DMNShape_102ixfg" dmnElementRef="Decision_0kgjdku">
-        <dc:Bounds height="80" width="180" x="550" y="80" />
+        <dc:Bounds height="80" width="180" x="550" y="830" />
       </dmndi:DMNShape>
       <dmndi:DMNEdge id="DMNEdge_1o69we6" dmnElementRef="InformationRequirement_16ss9ly">
-        <di:waypoint x="220" y="160" />
-        <di:waypoint x="410" y="290" />
-        <di:waypoint x="410" y="310" />
+        <di:waypoint x="220" y="910" />
+        <di:waypoint x="410" y="1040" />
+        <di:waypoint x="410" y="1060" />
       </dmndi:DMNEdge>
       <dmndi:DMNEdge id="DMNEdge_19gykhh" dmnElementRef="InformationRequirement_1le31nk">
-        <di:waypoint x="640" y="160" />
-        <di:waypoint x="470" y="290" />
-        <di:waypoint x="470" y="310" />
+        <di:waypoint x="640" y="910" />
+        <di:waypoint x="470" y="1040" />
+        <di:waypoint x="470" y="1060" />
       </dmndi:DMNEdge>
       <dmndi:DMNShape id="DMNShape_0ygg5hm" dmnElementRef="Decision_091c98u">
-        <dc:Bounds height="80" width="180" x="350" y="630" />
+        <dc:Bounds height="80" width="180" x="350" y="1380" />
       </dmndi:DMNShape>
       <dmndi:DMNEdge id="DMNEdge_0uq810f" dmnElementRef="InformationRequirement_1ifndtr">
-        <di:waypoint x="220" y="160" />
-        <di:waypoint x="395" y="610" />
-        <di:waypoint x="395" y="630" />
+        <di:waypoint x="220" y="910" />
+        <di:waypoint x="395" y="1360" />
+        <di:waypoint x="395" y="1380" />
       </dmndi:DMNEdge>
       <dmndi:DMNEdge id="DMNEdge_0hem3ki" dmnElementRef="InformationRequirement_1tu0ng5">
-        <di:waypoint x="640" y="160" />
-        <di:waypoint x="485" y="610" />
-        <di:waypoint x="485" y="630" />
+        <di:waypoint x="640" y="910" />
+        <di:waypoint x="485" y="1360" />
+        <di:waypoint x="485" y="1380" />
       </dmndi:DMNEdge>
       <dmndi:DMNEdge id="DMNEdge_1adnvt2" dmnElementRef="InformationRequirement_0ujtoqh">
-        <di:waypoint x="440" y="390" />
-        <di:waypoint x="440" y="610" />
-        <di:waypoint x="440" y="630" />
+        <di:waypoint x="440" y="1140" />
+        <di:waypoint x="440" y="1360" />
+        <di:waypoint x="440" y="1380" />
       </dmndi:DMNEdge>
+      <dmndi:DMNShape id="DMNShape_1ughn15" dmnElementRef="Decision_1bjk7mt">
+        <dc:Bounds height="80" width="180" x="340" y="500" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_0fyhydt" dmnElementRef="Decision_0dsv54y">
+        <dc:Bounds height="80" width="180" x="340" y="220" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_14gz2q3" dmnElementRef="Decision_033t82z">
+        <dc:Bounds height="80" width="180" x="340" y="350" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_0f146bk" dmnElementRef="Decision_07xsuxw">
+        <dc:Bounds height="80" width="180" x="340" y="650" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_012nq3d" dmnElementRef="Decision_0a33edf">
+        <dc:Bounds height="80" width="180" x="340" y="80" />
+      </dmndi:DMNShape>
     </dmndi:DMNDiagram>
   </dmndi:DMNDI>
 </definitions>

@@ -74,15 +74,23 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         JSONResponse with error details
     """
     correlation_id = getattr(request.state, 'correlation_id', None)
-    
-    logger.error(
-        "Unhandled exception in API",
-        error=str(exc),
-        error_type=type(exc).__name__,
-        path=request.url.path,
-        correlation_id=correlation_id,
-        exc_info=True
-    )
+    is_404 = isinstance(exc, StarletteHTTPException) and getattr(exc, 'status_code', None) == 404
+
+    if is_404:
+        logger.warning(
+            "Not found",
+            path=request.url.path,
+            correlation_id=correlation_id,
+        )
+    else:
+        logger.error(
+            "Unhandled exception in API",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            path=request.url.path,
+            correlation_id=correlation_id,
+            exc_info=True
+        )
     
     # Handle specific exception types
     if isinstance(exc, DataValidationError):

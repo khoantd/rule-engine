@@ -378,6 +378,66 @@ class ConditionsListResponse(BaseModel):
     count: int = Field(..., description="Total number of conditions")
 
 
+# Attribute (Fact) Management Models
+
+class AttributeCreateRequest(BaseModel):
+    """Request model for creating an attribute (fact)."""
+
+    attribute_id: str = Field(
+        ...,
+        description="Unique attribute identifier (key used in conditions and input data)",
+    )
+    name: str = Field(..., description="Display name for the attribute")
+    data_type: str = Field(
+        default="string",
+        description="Data type: string, number, integer, boolean, date, array, object",
+    )
+    description: Optional[str] = Field(None, description="Optional description")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "attribute_id": "issue",
+                "name": "Issue Number",
+                "data_type": "number",
+                "description": "Comic issue number",
+            }
+        }
+
+
+class AttributeUpdateRequest(BaseModel):
+    """Request model for updating an attribute."""
+
+    name: Optional[str] = Field(None, description="Display name")
+    data_type: Optional[str] = Field(
+        None,
+        description="Data type: string, number, integer, boolean, date, array, object",
+    )
+    description: Optional[str] = Field(None, description="Optional description")
+    status: Optional[str] = Field(None, description="Status: active, inactive, etc.")
+
+
+class AttributeResponse(BaseModel):
+    """Response model for an attribute (fact)."""
+
+    attribute_id: str = Field(..., description="Attribute identifier")
+    name: str = Field(..., description="Display name")
+    description: Optional[str] = Field(None, description="Description")
+    data_type: str = Field(..., description="Data type")
+    status: Optional[str] = Field(None, description="Status")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+
+
+class AttributesListResponse(BaseModel):
+    """Response model for listing attributes."""
+
+    attributes: List[AttributeResponse] = Field(
+        ..., description="List of attributes (facts)"
+    )
+    count: int = Field(..., description="Total number of attributes")
+
+
 # Action Management Models
 
 class ActionCreateRequest(BaseModel):

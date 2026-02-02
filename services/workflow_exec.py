@@ -1,15 +1,15 @@
-
 # from typing import Any
 from common.pattern.cor.handler import Handler
 from typing import Any, Dict, List, Optional, Tuple
 from domain.handler.newcase_handler import NewCaseHandler
 from domain.handler.inprocesscase_handler import InprogressCaseHandler
 from domain.handler.finishedcase_handler import FinishedCaseHandler
-from domain.handler.default_handler import DefaultHandler
 from common.logger import get_logger
 from common.exceptions import DataValidationError, WorkflowError
 from common.di.factory import get_handler_factory, HandlerFactory
 from common.di.container import get_container
+from common.execution_history import get_execution_history
+import time
 
 logger = get_logger(__name__)
 
@@ -17,13 +17,13 @@ logger = get_logger(__name__)
 def workflow_setup(handler_factory: Optional[HandlerFactory] = None) -> Handler:
     """
     Set up workflow handler chain using dependency injection.
-    
+
     Args:
         handler_factory: Optional handler factory. If None, uses default factory.
-    
+
     Returns:
         Handler chain starting with FinishedCaseHandler
-        
+
     Raises:
         WorkflowError: If handler setup fails
     """
@@ -32,12 +32,12 @@ def workflow_setup(handler_factory: Optional[HandlerFactory] = None) -> Handler:
         if handler_factory is None:
             # Try to get from DI container first
             container = get_container()
-            if container.has('handler_factory'):
-                handler_factory = container.get('handler_factory')
+            if container.has("handler_factory"):
+                handler_factory = container.get("handler_factory")
             else:
                 # Use default factory
                 handler_factory = get_handler_factory()
-        
+
         handler = handler_factory.create_handler_chain()
         logger.debug("Workflow handler chain setup successfully")
         return handler
@@ -46,26 +46,24 @@ def workflow_setup(handler_factory: Optional[HandlerFactory] = None) -> Handler:
         raise WorkflowError(
             f"Failed to setup workflow handlers: {str(e)}",
             error_code="WORKFLOW_SETUP_ERROR",
-            context={'error': str(e)}
+            context={"error": str(e)},
         ) from e
 
 
 def validate_workflow_inputs(
-    process_name: str, 
-    ls_stages: List[str], 
-    data: Dict[str, Any]
+    process_name: str, ls_stages: List[str], data: Dict[str, Any]
 ) -> Tuple[str, List[str], Dict[str, Any]]:
     """
     Validate workflow execution inputs.
-    
+
     Args:
         process_name: Process name
         ls_stages: List of workflow stages
         data: Input data dictionary
-        
+
     Returns:
         Tuple of validated (process_name, ls_stages, data)
-        
+
     Raises:
         DataValidationError: If inputs are invalid
     """
@@ -75,39 +73,53 @@ def validate_workflow_inputs(
         raise DataValidationError(
             "Process name cannot be empty or None",
             error_code="PROCESS_NAME_EMPTY",
-            context={'process_name': process_name}
+            context={"process_name": process_name},
         )
-    
+
     if not isinstance(process_name, str):
-        logger.error("Process name must be a string", 
-                    process_name_type=type(process_name).__name__)
+        logger.error(
+            "Process name must be a string",
+            process_name_type=type(process_name).__name__,
+        )
         raise DataValidationError(
             f"Process name must be a string, got {type(process_name).__name__}",
             error_code="PROCESS_NAME_INVALID_TYPE",
-            context={'process_name': process_name, 'process_name_type': type(process_name).__name__}
+            context={
+                "process_name": process_name,
+                "process_name_type": type(process_name).__name__,
+            },
         )
-    
+
     # Validate ls_stages
     if not isinstance(ls_stages, list):
-        logger.error("Workflow stages must be a list", 
-                    stages_type=type(ls_stages).__name__)
+        logger.error(
+            "Workflow stages must be a list", stages_type=type(ls_stages).__name__
+        )
         raise DataValidationError(
             f"Workflow stages must be a list, got {type(ls_stages).__name__}",
             error_code="STAGES_INVALID_TYPE",
-            context={'stages': ls_stages, 'stages_type': type(ls_stages).__name__}
+            context={"stages": ls_stages, "stages_type": type(ls_stages).__name__},
         )
-    
+
     # Validate all stages are strings
     for i, stage in enumerate(ls_stages):
         if not isinstance(stage, str):
-            logger.error("Workflow stage must be a string", 
-                        stage_index=i, stage=stage, stage_type=type(stage).__name__)
+            logger.error(
+                "Workflow stage must be a string",
+                stage_index=i,
+                stage=stage,
+                stage_type=type(stage).__name__,
+            )
             raise DataValidationError(
                 f"Workflow stage at index {i} must be a string, got {type(stage).__name__}",
                 error_code="STAGE_INVALID_TYPE",
-                context={'stage_index': i, 'stage': stage, 'stage_type': type(stage).__name__}
+                context={
+                    "stage_index": i,
+                    "stage": stage,
+                    "stage_type": type(stage).__name__,
+                },
             )
-    
+
     # Validate data
     if data is None:
         logger.warning("Input data is None, using empty dictionary")
@@ -117,13 +129,16 @@ def validate_workflow_inputs(
         raise DataValidationError(
             f"Input data must be a dictionary, got {type(data).__name__}",
             error_code="DATA_INVALID_TYPE",
-            context={'data': data, 'data_type': type(data).__name__}
+            context={"data": data, "data_type": type(data).__name__},
         )
-    
-    logger.debug("Workflow inputs validated successfully", 
-                process_name=process_name, stages_count=len(ls_stages),
-                data_keys=list(data.keys()) if data else [])
-    
+
+    logger.debug(
+        "Workflow inputs validated successfully",
+        process_name=process_name,
+        stages_count=len(ls_stages),
+        data_keys=list(data.keys()) if data else [],
+    )
+
     return process_name, ls_stages, data
 
 
@@ -136,7 +151,7 @@ def wf_exec(
     Execute workflow with given process name, stages, and data.
     
     The wf_exec is usually suited to work with a single handler. In most
-    cases, it is not even aware that the handler is part of a chain.
+    cases, it is not even aware that handler is part of a chain.
     
     Args:
         process_name: Name of the process/workflow
@@ -150,8 +165,15 @@ def wf_exec(
         DataValidationError: If input data is invalid
         WorkflowError: If workflow execution fails
     """
+    start_time = time.time()
+    history = get_execution_history()
+    
     logger.info("Starting workflow execution", process_name=process_name, 
                stages=ls_stages, input_data_keys=list(data.keys()) if isinstance(data, dict) else [])
+    
+    error = None
+    error_code = None
+    final_result = None
     
     try:
         # Validate inputs
@@ -239,16 +261,32 @@ def wf_exec(
                    process_name=validated_process_name,
                    final_data_keys=list(current_data.keys()) if isinstance(current_data, dict) else [])
         
+        final_result = result
         return result
         
-    except (DataValidationError, WorkflowError):
-        # Re-raise validation and workflow errors
+    except (DataValidationError, WorkflowError) as e:
+        error = str(e)
+        error_code = getattr(e, 'error_code', None)
         raise
     except Exception as e:
+        error = str(e)
+        error_code = "WORKFLOW_EXEC_ERROR"
         logger.error("Unexpected error in workflow execution", 
                    process_name=process_name, error=str(e), exc_info=True)
         raise WorkflowError(
             f"Unexpected error in workflow execution: {str(e)}",
-            error_code="WORKFLOW_EXEC_ERROR",
+            error_code=error_code,
             context={'process_name': process_name, 'error': str(e)}
         ) from e
+    finally:
+        # Log workflow execution to history
+        execution_time_ms = (time.time() - start_time) * 1000
+        history.log_execution(
+            input_data=data if isinstance(data, dict) else {},
+            output_data=final_result if final_result else {},
+            execution_time_ms=execution_time_ms,
+            rules_evaluated=0,
+            rules_matched=0,
+            error=error,
+            error_code=error_code
+        )

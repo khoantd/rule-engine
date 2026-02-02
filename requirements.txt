@@ -15,11 +15,20 @@ jsonpath_ng==1.5.3
 # Data classes with JSON support
 dataclasses-json==0.6.6
 
+# AWS SDK (for S3, CloudWatch, Secrets Manager)
+boto3>=1.28.0
+
 # Web API framework (FastAPI)
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
 python-multipart==0.0.6
+
+# Database (PostgreSQL/Timescale)
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+alembic==1.12.1
+python-dotenv==1.0.0
 
 # Note: Sphinx is NOT a production dependency
 # For documentation tools, use: pip install -r requirements-dev.txt

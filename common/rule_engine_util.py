@@ -186,6 +186,96 @@ def rules_set_exec(
     return prepared_rules_list
 
 
+# Keys accepted by ExtRule.__init__ (domain/rules/rule_obj.py)
+_EXTRULE_KEYS = frozenset({
+    "id", "rule_name", "conditions", "description", "result",
+    "rule_point", "weight", "priority", "type", "action_result",
+})
+
+
+def _rule_dict_to_extrule_kwargs(
+    conditionss_set: List[Condition],
+    rule: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Normalize a rule dict to kwargs accepted by ExtRule.__init__.
+
+    Handles two config formats:
+    - Structured: rule has 'conditions' (with 'item' or 'items'), 'description', 'result'.
+    - Flat: rule has 'attribute', 'condition', 'constant', 'message' (inline condition).
+      Resolves the inline condition via conditionss_set and builds conditions.item.
+    """
+    # Flat format: attribute, condition (equation), constant, message
+    if "attribute" in rule or "condition" in rule or "constant" in rule:
+        attr = rule.get("attribute")
+        equation = rule.get("condition")
+        constant = rule.get("constant")
+        if attr is not None and equation is not None:
+            constant_str = str(constant) if constant is not None else ""
+            condition_id = None
+            for cond in conditionss_set:
+                if (
+                    getattr(cond, "attribute", None) == attr
+                    and getattr(cond, "equation", None) == equation
+                    and str(getattr(cond, "constant", "")) == constant_str
+                ):
+                    condition_id = cond.condition_id
+                    break
+            if condition_id is None:
+                raise RuleCompilationError(
+                    f"No matching condition for attribute={attr!r}, condition={equation!r}, constant={constant_str!r}",
+                    error_code="CONDITION_NOT_FOUND",
+                    context={
+                        "rule_name": rule.get("rule_name", rule.get("rulename", "unknown")),
+                        "attribute": attr,
+                        "condition": equation,
+                        "constant": constant,
+                    },
+                )
+            kwargs = {
+                "id": rule.get("id", ""),
+                "rule_name": rule.get("rule_name", rule.get("rulename", "unknown")),
+                "conditions": {"item": condition_id},
+                "description": rule.get("message", rule.get("description", "")),
+                "result": rule.get("action_result", rule.get("result", "")),
+                "rule_point": float(rule.get("rule_point", 0)),
+                "weight": float(rule.get("weight", 0)),
+                "priority": int(rule.get("priority", 0)),
+                "type": "simple",
+                "action_result": rule.get("action_result", rule.get("result", "")),
+            }
+            return kwargs
+    # Structured format: only pass keys ExtRule accepts (with aliases)
+    raw_type = rule.get("type", "simple")
+    if raw_type == "standard":
+        raw_type = "simple"
+    kwargs = {
+        k: rule[k]
+        for k in _EXTRULE_KEYS
+        if k in rule
+    }
+    # Support alternate config keys: rulename -> rule_name, rulepoint -> rule_point
+    if "rule_name" not in kwargs and "rulename" in rule:
+        kwargs["rule_name"] = rule["rulename"]
+    if "rule_point" not in kwargs and "rulepoint" in rule:
+        kwargs["rule_point"] = float(rule["rulepoint"])
+    if "type" not in kwargs:
+        kwargs["type"] = raw_type
+    else:
+        kwargs["type"] = "simple" if kwargs["type"] == "standard" else kwargs["type"]
+    # Ensure required ExtRule fields exist
+    kwargs.setdefault("id", rule.get("id", ""))
+    kwargs.setdefault("rule_name", rule.get("rule_name", rule.get("rulename", "unknown")))
+    kwargs.setdefault("conditions", rule.get("conditions"))
+    kwargs.setdefault("description", rule.get("description", rule.get("message", "")))
+    kwargs.setdefault("result", rule.get("result", rule.get("action_result", "")))
+    kwargs.setdefault("rule_point", float(rule.get("rule_point", rule.get("rulepoint", 0))))
+    kwargs.setdefault("weight", float(rule.get("weight", 0)))
+    kwargs.setdefault("priority", int(rule.get("priority", 0)))
+    kwargs.setdefault("action_result", rule.get("action_result", rule.get("result", "")))
+    return kwargs
+
+
 def rule_prepare(
     conditionss_set: List[Condition], 
     rule: Union[Dict[str, Any], ExtRule]
@@ -249,7 +339,10 @@ def rule_prepare(
         # Convert rule to ExtRule if needed
         if isinstance(rule, dict):
             try:
-                tmp_rule = ExtRule(**rule)
+                kwargs = _rule_dict_to_extrule_kwargs(conditionss_set, rule)
+                tmp_rule = ExtRule(**kwargs)
+            except RuleCompilationError:
+                raise
             except TypeError as e:
                 logger.error("Invalid rule structure", rule_name=rule_name, error=str(e), exc_info=True)
                 raise RuleCompilationError(

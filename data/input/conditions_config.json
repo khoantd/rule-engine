@@ -90,6 +90,104 @@
       "attribute": "status",
       "equation": "range",
       "constant": ["uat"]
+    },
+    {
+      "condition_id": "C0014",
+      "condition_name": "Condition 14",
+      "attribute": "score",
+      "equation": "greater_than",
+      "constant": "80"
+    },
+    {
+      "condition_id": "C0020",
+      "condition_name": "averageScore high",
+      "attribute": "averageScore",
+      "equation": "greater_than_or_equal",
+      "constant": 70
+    },
+    {
+      "condition_id": "C0021",
+      "condition_name": "engagementScore high",
+      "attribute": "engagementScore",
+      "equation": "greater_than_or_equal",
+      "constant": 60
+    },
+    {
+      "condition_id": "C0022",
+      "condition_name": "demographicsScore high",
+      "attribute": "demographicsScore",
+      "equation": "greater_than_or_equal",
+      "constant": 50
+    },
+    {
+      "condition_id": "C0023",
+      "condition_name": "behaviorScore high",
+      "attribute": "behaviorScore",
+      "equation": "greater_than_or_equal",
+      "constant": 50
+    },
+    {
+      "condition_id": "C0024",
+      "condition_name": "firmographicsScore high",
+      "attribute": "firmographicsScore",
+      "equation": "greater_than_or_equal",
+      "constant": 50
+    },
+    {
+      "condition_id": "C0025",
+      "condition_name": "dealValue above threshold",
+      "attribute": "dealValue",
+      "equation": "greater_than",
+      "constant": 10000
+    },
+    {
+      "condition_id": "C0026",
+      "condition_name": "activityCount above threshold",
+      "attribute": "activityCount",
+      "equation": "greater_than",
+      "constant": 5
+    },
+    {
+      "condition_id": "C0027",
+      "condition_name": "hasRecentActivity true",
+      "attribute": "hasRecentActivity",
+      "equation": "equal",
+      "constant": true
+    },
+    {
+      "condition_id": "C0028",
+      "condition_name": "dealSizeTier high",
+      "attribute": "dealSizeTier",
+      "equation": "equal",
+      "constant": "high"
+    },
+    {
+      "condition_id": "C0029",
+      "condition_name": "isHighValueIndustry true",
+      "attribute": "isHighValueIndustry",
+      "equation": "equal",
+      "constant": true
+    },
+    {
+      "condition_id": "C0030",
+      "condition_name": "industry in target list",
+      "attribute": "industry",
+      "equation": "range",
+      "constant": ["Technology", "Finance", "Healthcare"]
+    },
+    {
+      "condition_id": "C0031",
+      "condition_name": "source in allowed",
+      "attribute": "source",
+      "equation": "range",
+      "constant": ["web", "api", "import"]
+    },
+    {
+      "condition_id": "C0032",
+      "condition_name": "status active",
+      "attribute": "status",
+      "equation": "range",
+      "constant": ["open", "qualified", "negotiation"]
     }
   ]
 }

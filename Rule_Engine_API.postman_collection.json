@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "rule-engine-api-collection",
 		"name": "Rule Engine API",
-		"description": "Complete API collection for Rule Engine service covering all endpoints including rule execution, workflow execution, DMN operations, and management APIs.",
+		"description": "Complete API collection for Rule Engine service covering all endpoints including rule execution, workflow execution, DMN operations, management APIs, rule versioning, and A/B testing.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "rule-engine"
 	},
@@ -682,7 +682,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"condition_id\": \"C9999\",\n  \"attribute\": \"issue\",\n  \"equation\": \"greater_than\",\n  \"constant\": \"30\",\n  \"message\": \"Issue number is greater than 30\"\n}"
+							"raw": "{\n  \"condition_id\": \"C9999\",\n  \"condition_name\": \"Test condition\",\n  \"attribute\": \"issue\",\n  \"equation\": \"greater_than\",\n  \"constant\": \"30\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/management/conditions",
@@ -717,7 +717,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"attribute\": \"issue\",\n  \"equation\": \"greater_than_or_equal\",\n  \"constant\": \"35\",\n  \"message\": \"Updated message\"\n}"
+							"raw": "{\n  \"condition_name\": \"Updated condition\",\n  \"attribute\": \"issue\",\n  \"equation\": \"greater_than_or_equal\",\n  \"constant\": \"35\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/management/conditions/C0001",
@@ -1002,7 +1002,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"ruleset_name\": \"test_ruleset\",\n  \"rules\": [\n    {\n      \"id\": \"R0001\",\n      \"rule_name\": \"Rule 1\",\n      \"type\": \"simple\",\n      \"conditions\": {\n        \"item\": \"C0001\"\n      },\n      \"result\": \"Y\",\n      \"weight\": 1.0,\n      \"rule_point\": 10.0,\n      \"priority\": 1,\n      \"action_result\": \"Y\"\n    }\n  ],\n  \"patterns\": {\n    \"YYY\": \"Approved\"\n  }\n}"
+							"raw": "{\n  \"ruleset_name\": \"test_ruleset\",\n  \"rules\": [\n    {\n      \"id\": \"R0001\",\n      \"rule_name\": \"Rule 1\",\n      \"type\": \"simple\",\n      \"conditions\": {\n        \"item\": \"C0001\"\n      },\n      \"description\": \"Rule 1 description\",\n      \"result\": \"Y\",\n      \"weight\": 1.0,\n      \"rule_point\": 10.0,\n      \"priority\": 1,\n      \"action_result\": \"Y\"\n    }\n  ],\n  \"actionset\": [\"YYY\"]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/management/rulesets",
@@ -1037,7 +1037,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"rules\": [\n    {\n      \"id\": \"R0001\",\n      \"rule_name\": \"Updated Rule 1\",\n      \"type\": \"simple\",\n      \"conditions\": {\n        \"item\": \"C0001\"\n      },\n      \"result\": \"Y\",\n      \"weight\": 1.5,\n      \"rule_point\": 15.0,\n      \"priority\": 1,\n      \"action_result\": \"Y\"\n    }\n  ],\n  \"patterns\": {\n    \"YYY\": \"Approved\",\n    \"YNY\": \"Conditionally Approved\"\n  }\n}"
+							"raw": "{\n  \"rules\": [\n    {\n      \"id\": \"R0001\",\n      \"rule_name\": \"Updated Rule 1\",\n      \"type\": \"simple\",\n      \"conditions\": {\n        \"item\": \"C0001\"\n      },\n      \"description\": \"Updated Rule 1 description\",\n      \"result\": \"Y\",\n      \"weight\": 1.5,\n      \"rule_point\": 15.0,\n      \"priority\": 1,\n      \"action_result\": \"Y\"\n    }\n  ],\n  \"actionset\": [\"YYY\", \"YNY\"]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/management/rulesets/default_ruleset",
@@ -1086,6 +1086,526 @@
 				}
 			],
 			"description": "CRUD operations for Rulesets management"
+		},
+		{
+			"name": "Rule Versioning",
+			"item": [
+				{
+					"name": "Get Version History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id?limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"versions",
+								":rule_id"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Maximum number of versions to return"
+								}
+							],
+							"variable": [
+								{
+									"key": "rule_id",
+									"value": "R0001"
+								}
+							]
+						},
+						"description": "Retrieve the complete version history for a specific rule."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current Version",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id/current",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"versions",
+								":rule_id",
+								"current"
+							],
+							"variable": [
+								{
+									"key": "rule_id",
+									"value": "R0001"
+								}
+							]
+						},
+						"description": "Retrieve the current (latest) version of a specific rule."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Specific Version",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"versions",
+								":rule_id",
+								"1"
+							],
+							"variable": [
+								{
+									"key": "rule_id",
+									"value": "R0001"
+								}
+							]
+						},
+						"description": "Retrieve a specific version of a rule by version number."
+					},
+					"response": []
+				},
+				{
+					"name": "Compare Two Versions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"version_a\": 1,\n  \"version_b\": 2\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id/compare",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"versions",
+								":rule_id",
+								"compare"
+							],
+							"variable": [
+								{
+									"key": "rule_id",
+									"value": "R0001"
+								}
+							]
+						},
+						"description": "Compare two versions of a rule to see differences."
+					},
+					"response": []
+				},
+				{
+					"name": "Rollback Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"version_number\": 1,\n  \"change_reason\": \"Rollback due to production issue\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id/rollback",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"versions",
+								":rule_id",
+								"rollback"
+							],
+							"variable": [
+								{
+									"key": "rule_id",
+									"value": "R0001"
+								}
+							]
+						},
+						"description": "Rollback a rule to a specific previous version."
+					},
+					"response": []
+				}
+			],
+			"description": "Rule version history, compare, and rollback endpoints"
+		},
+		{
+			"name": "A/B Testing",
+			"item": [
+				{
+					"name": "Create A/B Test",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"test_id\": \"test-001\",\n  \"test_name\": \"Rule variant comparison\",\n  \"rule_id\": \"R0001\",\n  \"ruleset_id\": 1,\n  \"variant_a_version\": \"v1\",\n  \"variant_b_version\": \"v2\",\n  \"description\": \"Compare v1 vs v2 for conversion\",\n  \"traffic_split_a\": 0.5,\n  \"traffic_split_b\": 0.5,\n  \"variant_a_description\": \"Control (current)\",\n  \"variant_b_description\": \"Treatment (new)\",\n  \"duration_hours\": 168,\n  \"min_sample_size\": 100,\n  \"confidence_level\": 0.95\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/ab-tests",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"ab-tests"
+							]
+						},
+						"description": "Create a new A/B test to compare two rule versions."
+					},
+					"response": []
+				},
+				{
+					"name": "List A/B Tests",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/ab-tests?rule_id=R0001&status=running&limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"ab-tests"
+							],
+							"query": [
+								{
+									"key": "rule_id",
+									"value": "R0001",
+									"description": "Filter by rule ID"
+								},
+								{
+									"key": "status",
+									"value": "running",
+									"description": "Filter by status (draft, running, stopped)"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Maximum number of tests to return"
+								}
+							]
+						},
+						"description": "List all A/B tests with optional filters."
+					},
+					"response": []
+				},
+				{
+					"name": "Get A/B Test",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"ab-tests",
+								":test_id"
+							],
+							"variable": [
+								{
+									"key": "test_id",
+									"value": "test-001"
+								}
+							]
+						},
+						"description": "Retrieve details of a specific A/B test."
+					},
+					"response": []
+				},
+				{
+					"name": "Start A/B Test",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"started_by\": \"admin\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id/start",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"ab-tests",
+								":test_id",
+								"start"
+							],
+							"variable": [
+								{
+									"key": "test_id",
+									"value": "test-001"
+								}
+							]
+						},
+						"description": "Start a draft A/B test."
+					},
+					"response": []
+				},
+				{
+					"name": "Stop A/B Test",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"winning_variant\": \"B\",\n  \"stopped_by\": \"admin\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id/stop",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"ab-tests",
+								":test_id",
+								"stop"
+							],
+							"variable": [
+								{
+									"key": "test_id",
+									"value": "test-001"
+								}
+							]
+						},
+						"description": "Stop a running A/B test and optionally declare a winner (A or B)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get A/B Test Metrics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id/metrics",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"ab-tests",
+								":test_id",
+								"metrics"
+							],
+							"variable": [
+								{
+									"key": "test_id",
+									"value": "test-001"
+								}
+							]
+						},
+						"description": "Retrieve metrics and analysis for an A/B test."
+					},
+					"response": []
+				},
+				{
+					"name": "Assign Variant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"assignment_key\": \"user-12345\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id/assign",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"ab-tests",
+								":test_id",
+								"assign"
+							],
+							"variable": [
+								{
+									"key": "test_id",
+									"value": "test-001"
+								}
+							]
+						},
+						"description": "Assign an assignment key (e.g. user ID, session ID) to a variant using hash-based routing."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete A/B Test",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"ab-tests",
+								":test_id"
+							],
+							"variable": [
+								{
+									"key": "test_id",
+									"value": "test-001"
+								}
+							]
+						},
+						"description": "Delete a draft A/B test (only tests in draft status can be deleted)."
+					},
+					"response": []
+				}
+			],
+			"description": "A/B test creation, listing, start/stop, metrics, variant assignment, and deletion"
 		}
 	],
 	"event": [
