@@ -353,20 +353,23 @@ class DatabaseConfigRepository(ConfigRepository):
 
     def _condition_to_dict(self, condition: Condition) -> Dict[str, Any]:
         """
-        Convert Condition model to dictionary format.
+        Convert Condition model to dictionary format compatible with domain Condition.
+
+        Uses keys expected by domain.conditions.condition_obj.Condition:
+        condition_id, condition_name, attribute, equation, constant.
 
         Args:
             condition: Condition model instance
 
         Returns:
-            Dictionary in rule engine format
+            Dictionary in rule engine format (domain Condition.__init__ kwargs)
         """
         return {
-            "id": condition.condition_id,
-            "name": condition.name,
+            "condition_id": condition.condition_id,
+            "condition_name": condition.name,
             "attribute": condition.attribute,
-            "operator": condition.operator,
-            "value": condition.value,
+            "equation": condition.operator,
+            "constant": condition.value,
         }
 
 
