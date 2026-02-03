@@ -22,6 +22,7 @@ from api.routes import (
     rule_versioning,
     ab_testing,
     hot_reload,
+    consumers,
 )
 from api.middleware.logging import LoggingMiddleware
 from api.middleware.auth import AuthenticationMiddleware
@@ -104,6 +105,9 @@ app.include_router(ab_testing.router)
 
 # Include hot reload router
 app.include_router(hot_reload.router)
+
+# Include consumers router
+app.include_router(consumers.router)
 
 
 @app.websocket("/ws/hot-reload")

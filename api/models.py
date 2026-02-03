@@ -596,3 +596,59 @@ class DMNRuleExecutionRequest(BaseModel):
             }
         }
 
+
+# Consumer Management Models
+
+class ConsumerCreateRequest(BaseModel):
+    """Request model for creating a consumer."""
+    
+    consumer_id: str = Field(..., description="Unique consumer identifier")
+    name: str = Field(..., description="Consumer name")
+    description: Optional[str] = Field(None, description="Consumer description")
+    status: str = Field(default="active", description="Consumer status: active, inactive")
+    tags: Optional[List[str]] = Field(None, description="List of tags")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "consumer_id": "client_1",
+                "name": "Test Client",
+                "description": "For testing purposes",
+                "status": "active",
+                "tags": ["test", "internal"],
+                "metadata": {"env": "staging"}
+            }
+        }
+
+
+class ConsumerUpdateRequest(BaseModel):
+    """Request model for updating a consumer."""
+    
+    name: Optional[str] = Field(None, description="Consumer name")
+    description: Optional[str] = Field(None, description="Consumer description")
+    status: Optional[str] = Field(None, description="Consumer status: active, inactive")
+    tags: Optional[List[str]] = Field(None, description="List of tags")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ConsumerResponse(BaseModel):
+    """Response model for a consumer."""
+    
+    id: int = Field(..., description="Internal identifier")
+    consumer_id: str = Field(..., description="Unique consumer identifier")
+    name: str = Field(..., description="Consumer name")
+    description: Optional[str] = Field(None, description="Consumer description")
+    status: str = Field(..., description="Consumer status")
+    tags: Optional[List[str]] = Field(None, description="List of tags")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+
+
+class ConsumersListResponse(BaseModel):
+    """Response model for listing consumers."""
+    
+    consumers: List[ConsumerResponse] = Field(..., description="List of consumers")
+    count: int = Field(..., description="Total number of consumers")
+

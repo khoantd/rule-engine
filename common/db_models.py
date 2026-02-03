@@ -869,6 +869,94 @@ class TestAssignment(Base):
         """Convert model to dictionary."""
         return {
             "id": self.id,
+            "test_id": self.test_id,
+            "test_name": self.test_name,
+            "description": self.description,
+            "rule_id": self.rule_id,
+            "ruleset_id": self.ruleset_id,
+            "traffic_split_a": self.traffic_split_a,
+            "traffic_split_b": self.traffic_split_b,
+            "variant_a_version": self.variant_a_version,
+            "variant_a_description": self.variant_a_description,
+            "variant_b_version": self.variant_b_version,
+            "variant_b_description": self.variant_b_description,
+            "status": self.status,
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "duration_hours": self.duration_hours,
+            "min_sample_size": self.min_sample_size,
+            "confidence_level": self.confidence_level,
+            "winning_variant": self.winning_variant,
+            "statistical_significance": self.statistical_significance,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_by": self.created_by,
+            "tags": self.tags,
+            "metadata": self.extra_metadata,
+        }
+
+
+class Consumer(Base):
+    """
+    Consumer model.
+
+    Represents a client or system that uses the rule engine.
+    """
+
+    __tablename__ = "consumers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consumer_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=RuleStatus.ACTIVE.value
+    )
+
+    # Metadata
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    created_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    updated_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # JSON fields for flexible configuration
+    tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    extra_metadata: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_consumers_consumer_id", "consumer_id"),
+        Index("idx_consumers_status", "status"),
+    )
+
+    @validates("consumer_id")
+    def validate_consumer_id(self, key, consumer_id):
+        if not consumer_id or not consumer_id.strip():
+            raise ValueError("Consumer ID cannot be empty")
+        return consumer_id.strip()
+
+    def to_dict(self) -> dict:
+        """Convert model to dictionary."""
+        return {
+            "id": self.id,
+            "consumer_id": self.consumer_id,
+            "name": self.name,
+            "description": self.description,
+            "status": self.status,
+            "tags": self.tags,
+            "metadata": self.extra_metadata,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_by": self.created_by,
+            "updated_by": self.updated_by,
+        }
+
+        return {
+            "id": self.id,
             "ab_test_id": self.ab_test_id,
             "assignment_key": self.assignment_key,
             "variant": self.variant,

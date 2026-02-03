@@ -22,6 +22,7 @@ from common.db_models import (
     Pattern,
     RuleStatus,
     Base,
+    Consumer,
 )
 from common.db_connection import get_db_session
 from common.logger import get_logger
@@ -798,6 +799,166 @@ class ConditionRepository:
 
             session.delete(condition)
             logger.info("Condition deleted", condition_id=condition_id)
+            return True
+
+
+class ConsumerRepository:
+    """
+    Repository for Consumer CRUD operations.
+    """
+
+    def create_consumer(
+        self,
+        consumer_id: str,
+        name: str,
+        description: Optional[str] = None,
+        status: str = RuleStatus.ACTIVE.value,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[dict] = None,
+        created_by: Optional[str] = None,
+    ) -> Consumer:
+        """
+        Create a new consumer.
+
+        Args:
+            consumer_id: Unique consumer identifier
+            name: Consumer name
+            description: Consumer description
+            status: Consumer status
+            tags: List of tags
+            metadata: Additional metadata
+            created_by: User who created the consumer
+
+        Returns:
+            Created Consumer instance
+        """
+        try:
+            with get_db_session() as session:
+                consumer = Consumer(
+                    consumer_id=consumer_id,
+                    name=name,
+                    description=description,
+                    status=status,
+                    tags=tags,
+                    extra_metadata=metadata,
+                    created_by=created_by,
+                    updated_by=created_by,
+                )
+
+                session.add(consumer)
+                session.flush()
+
+                logger.info("Consumer created", consumer_id=consumer.id, name=name)
+
+                return consumer
+        except Exception as e:
+            logger.error(f"Error in repository create_consumer: {str(e)}", exc_info=True)
+            raise
+
+    def get_consumer(self, id: int) -> Optional[Consumer]:
+        """
+        Get consumer by internal ID.
+
+        Args:
+            id: Internal ID
+
+        Returns:
+            Consumer instance or None
+        """
+        try:
+            with get_db_session() as session:
+                return session.query(Consumer).filter(Consumer.id == id).first()
+        except Exception as e:
+            logger.error(f"Error in repository get_consumer: {str(e)}", exc_info=True)
+            raise
+
+    def get_consumer_by_consumer_id(self, consumer_id: str) -> Optional[Consumer]:
+        """
+        Get consumer by business consumer_id.
+
+        Args:
+            consumer_id: Consumer identifier string
+
+        Returns:
+            Consumer instance or None
+        """
+        try:
+            with get_db_session() as session:
+                return session.query(Consumer).filter(Consumer.consumer_id == consumer_id).first()
+        except Exception as e:
+            logger.error(f"Error in repository get_consumer_by_consumer_id: {str(e)}", exc_info=True)
+            raise
+
+    def list_consumers(
+        self,
+        status: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Consumer]:
+        """
+        List consumers with optional filters.
+
+        Args:
+            status: Filter by status
+            limit: Maximum number of results
+
+        Returns:
+            List of Consumer instances
+        """
+        try:
+            with get_db_session() as session:
+                query = session.query(Consumer)
+
+                if status:
+                    query = query.filter(Consumer.status == status)
+
+                return query.order_by(Consumer.created_at.desc()).limit(limit).all()
+        except Exception as e:
+            logger.error(f"Error in repository list_consumers: {str(e)}", exc_info=True)
+            raise
+
+    def update_consumer(self, id: int, **kwargs) -> Optional[Consumer]:
+        """
+        Update consumer.
+
+        Args:
+            id: Internal ID
+            **kwargs: Fields to update
+
+        Returns:
+            Updated Consumer instance or None
+        """
+        with get_db_session() as session:
+            consumer = session.query(Consumer).filter(Consumer.id == id).first()
+
+            if not consumer:
+                return None
+
+            for key, value in kwargs.items():
+                if hasattr(consumer, key):
+                    setattr(consumer, key, value)
+
+            logger.info("Consumer updated", id=id)
+            return consumer
+
+    def delete_consumer(self, id: int) -> bool:
+        """
+        Delete consumer.
+
+        Args:
+            id: Internal ID
+
+        Returns:
+            True if deleted, False if not found
+        """
+        with get_db_session() as session:
+            consumer = session.query(Consumer).filter(Consumer.id == id).first()
+
+            if not consumer:
+                return False
+
+            session.delete(consumer)
+
+            logger.info("Consumer deleted", id=id)
             return True
 
     def get_condition_by_condition_id(self, condition_id: str) -> Optional[Condition]:
