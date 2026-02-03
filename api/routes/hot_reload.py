@@ -44,6 +44,15 @@ class ReloadStatusRequest(BaseModel):
     )
 
 
+class ValidateFromSourceRequest(BaseModel):
+    """Request model for validating rules from config repository (e.g. DB)."""
+
+    source: Optional[str] = Field(
+        None,
+        description="Optional source: ruleset name (DB) or file path (file repo). Default uses config.",
+    )
+
+
 class StartMonitoringRequest(BaseModel):
     """Request model for starting hot reload monitoring."""
 
@@ -322,6 +331,66 @@ async def validate_rules(
                 "error_type": type(e).__name__,
                 "message": str(e),
                 "error_code": "VALIDATION_ERROR",
+            },
+        )
+
+
+@router.post(
+    "/validate-from-source",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_200_OK,
+    summary="Validate rules from repository (e.g. DB)",
+    description="Load rules and conditions from the config repository (database when USE_DATABASE=true) and validate. Returns invalid cases with rule name and related conditions in each error message.",
+)
+async def validate_rules_from_source(
+    request: Optional[ValidateFromSourceRequest] = None,
+    api_key: Optional[str] = Depends(get_api_key),
+) -> Dict[str, Any]:
+    """
+    Validate rules from config repository (e.g. database).
+
+    When the app uses the database repository, this checks invalid rule/condition
+    cases from the DB and returns per-rule results. Each error message includes
+    the rule name and related conditions for clarity.
+
+    Returns:
+        Validation result with is_valid, rules (per-rule rule_name, is_valid, errors, warnings),
+        summary (total_rules, invalid_rules, total_errors), and source_type (database/file/s3).
+
+    Raises:
+        HTTPException: If loading or validation fails
+    """
+    source = request.source if request is not None else None
+    logger.info("Validate rules from source requested", source=source)
+
+    try:
+        service = get_hot_reload_service()
+        result = service.validate_from_source(source=source)
+        return result
+    except ConfigurationError as e:
+        logger.warning("Configuration error validating from source", error=str(e), source=source)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_type": type(e).__name__,
+                "message": str(e),
+                "error_code": e.error_code,
+                "context": e.context,
+            },
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to validate rules from source",
+            error=str(e),
+            exc_info=True,
+            source=source,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_type": type(e).__name__,
+                "message": str(e),
+                "error_code": "VALIDATE_FROM_SOURCE_ERROR",
             },
         )
 

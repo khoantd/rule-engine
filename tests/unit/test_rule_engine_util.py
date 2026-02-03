@@ -225,6 +225,36 @@ class TestRulePrepare:
             rule_prepare(sample_condition_objects, rule)
         
         assert exc_info.value.error_code == "CONDITION_NOT_FOUND"
+        msg = str(exc_info.value)
+        assert "Rule1" in msg, "Error message should include rule name"
+        assert "NONEXISTENT" in msg or "condition" in msg.lower(), (
+            "Error message should include related condition (condition_id)"
+        )
+
+    def test_rule_prepare_flat_format_empty_attribute_raises_condition_empty(
+        self, sample_condition_objects
+    ):
+        """Test flat-format rule with empty attribute raises RuleCompilationError CONDITION_EMPTY."""
+        rule = {
+            "rule_name": "Rule1",
+            "attribute": "",
+            "condition": "equal",
+            "constant": "value",
+            "message": "Empty attribute rule",
+            "rule_point": 10.0,
+            "weight": 1.0,
+            "priority": 1,
+            "action_result": "A",
+        }
+        with pytest.raises(RuleCompilationError) as exc_info:
+            rule_prepare(sample_condition_objects, rule)
+        assert exc_info.value.error_code == "CONDITION_EMPTY"
+        msg = str(exc_info.value)
+        assert "empty attribute" in msg.lower() or "cannot resolve" in msg.lower()
+        assert "Rule1" in msg, "Error message should include rule name"
+        assert "conditions:" in msg or "attribute=" in msg, (
+            "Error message should include related conditions (attribute/condition/constant)"
+        )
 
 
 class TestFindActionRecommendation:
@@ -356,6 +386,31 @@ class TestRulesSetExec:
         
         result = rules_set_exec(rules_set, sample_condition_objects)
         
+        assert len(result) == 1
+        assert result[0]["rule_name"] == "Rule1"
+
+    def test_rules_set_exec_skips_empty_attribute_rule(self, sample_condition_objects):
+        """Test that rules with empty attribute/condition are skipped with warning."""
+        rules_set = [
+            {
+                "rulename": "Rule1",
+                "type": "simple",
+                "priority": 1,
+                "conditions": {"item": "C0001"},
+                "rulepoint": 10.0,
+                "weight": 1.0,
+                "action_result": "A",
+            },
+            {
+                "rule_name": "Warm Lead",
+                "attribute": "",
+                "condition": "equal",
+                "constant": "",
+                "message": "Invalid rule",
+            },
+        ]
+        result = rules_set_exec(rules_set, sample_condition_objects)
+        # Only the valid rule should be in the result; "Warm Lead" is skipped
         assert len(result) == 1
         assert result[0]["rule_name"] == "Rule1"
 

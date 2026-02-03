@@ -9,6 +9,13 @@ This module provides centralized configuration management with support for:
 """
 
 import os
+
+# Load .env early so USE_DATABASE, TIMESCALE_SERVICE_URL, DATABASE_URL are available
+try:
+    from dotenv import load_dotenv, find_dotenv
+    load_dotenv(find_dotenv())
+except ImportError:
+    pass
 from dataclasses import dataclass, field
 from typing import Optional
 from pathlib import Path

@@ -182,7 +182,19 @@ def rules_set_exec(
     rules_list = rules_set
     prepared_rules_list = []
     for rule in rules_list:
-        prepared_rules_list.append(rule_prepare(conditionss_set, rule))
+        try:
+            prepared_rules_list.append(rule_prepare(conditionss_set, rule))
+        except RuleCompilationError as e:
+            # Skip rules with empty attribute/condition (e.g. invalid flat rules from DB/file)
+            if getattr(e, "error_code", None) == "CONDITION_EMPTY":
+                rn = rule.get("rule_name", rule.get("rulename", "unknown"))
+                logger.warning(
+                    "Skipping rule with empty attribute or condition; fix or remove the rule.",
+                    rule_name=rn,
+                    error_code=e.error_code,
+                )
+                continue
+            raise
     return prepared_rules_list
 
 
@@ -191,6 +203,27 @@ _EXTRULE_KEYS = frozenset({
     "id", "rule_name", "conditions", "description", "result",
     "rule_point", "weight", "priority", "type", "action_result",
 })
+
+
+def _format_rule_error_message(
+    rule_name: str,
+    detail: str,
+    conditions_info: Optional[str] = None,
+) -> str:
+    """
+    Build a clear error message including rule name and related conditions.
+
+    Args:
+        rule_name: Name of the rule (e.g. from rulename/rule_name).
+        detail: Short description of the error.
+        conditions_info: Optional description of related conditions (IDs, expression, etc.).
+
+    Returns:
+        Message like "Rule 'X': detail" or "Rule 'X' (conditions: ...): detail".
+    """
+    if conditions_info:
+        return f"Rule '{rule_name}' (conditions: {conditions_info}): {detail}"
+    return f"Rule '{rule_name}': {detail}"
 
 
 def _rule_dict_to_extrule_kwargs(
@@ -212,6 +245,24 @@ def _rule_dict_to_extrule_kwargs(
         constant = rule.get("constant")
         attr_str = (attr if attr is not None else "").strip() if attr is not None else ""
         equation_str = (equation if equation is not None else "").strip() if equation is not None else ""
+        # Reject empty or whitespace-only attribute before lookup (clearer error)
+        if (attr is not None or equation is not None or constant is not None) and not attr_str:
+            rn = rule.get("rule_name", rule.get("rulename", "unknown"))
+            cond_info = f"attribute={attr!r}, condition={equation!r}, constant={constant!r}"
+            raise RuleCompilationError(
+                _format_rule_error_message(
+                    rn,
+                    "empty attribute or condition; cannot resolve. Fix or remove the rule.",
+                    conditions_info=cond_info,
+                ),
+                error_code="CONDITION_EMPTY",
+                context={
+                    "rule_name": rn,
+                    "attribute": attr,
+                    "condition": equation,
+                    "constant": constant,
+                },
+            )
         if attr_str and equation_str:
             constant_str = str(constant) if constant is not None else ""
             condition_id = None
@@ -224,11 +275,17 @@ def _rule_dict_to_extrule_kwargs(
                     condition_id = cond.condition_id
                     break
             if condition_id is None:
+                rn = rule.get("rule_name", rule.get("rulename", "unknown"))
+                cond_info = f"attribute={attr!r}, condition={equation!r}, constant={constant_str!r}"
                 raise RuleCompilationError(
-                    f"No matching condition for attribute={attr!r}, condition={equation!r}, constant={constant_str!r}",
+                    _format_rule_error_message(
+                        rn,
+                        f"no matching condition for {cond_info}",
+                        conditions_info=cond_info,
+                    ),
                     error_code="CONDITION_NOT_FOUND",
                     context={
-                        "rule_name": rule.get("rule_name", rule.get("rulename", "unknown")),
+                        "rule_name": rn,
                         "attribute": attr,
                         "condition": equation,
                         "constant": constant,
@@ -248,11 +305,17 @@ def _rule_dict_to_extrule_kwargs(
             }
             return kwargs
         if attr is not None or equation is not None or constant is not None:
+            rn = rule.get("rule_name", rule.get("rulename", "unknown"))
+            cond_info = f"attribute={attr!r}, condition={equation!r}, constant={constant!r}"
             raise RuleCompilationError(
-                "Rule has empty attribute or condition; cannot resolve. Fix or remove the rule.",
+                _format_rule_error_message(
+                    rn,
+                    "empty attribute or condition; cannot resolve. Fix or remove the rule.",
+                    conditions_info=cond_info,
+                ),
                 error_code="CONDITION_EMPTY",
                 context={
-                    "rule_name": rule.get("rule_name", rule.get("rulename", "unknown")),
+                    "rule_name": rn,
                     "attribute": attr,
                     "condition": equation,
                     "constant": constant,
@@ -344,9 +407,9 @@ def rule_prepare(
         if not rule:
             logger.error("Rule is None or empty", rule_name=rule_name)
             raise RuleCompilationError(
-                "Rule cannot be None or empty",
+                _format_rule_error_message(rule_name, "rule cannot be None or empty"),
                 error_code="RULE_EMPTY",
-                context={'rule': rule}
+                context={"rule_name": rule_name, "rule": rule},
             )
         
         # Convert rule to ExtRule if needed
@@ -359,9 +422,9 @@ def rule_prepare(
             except TypeError as e:
                 logger.error("Invalid rule structure", rule_name=rule_name, error=str(e), exc_info=True)
                 raise RuleCompilationError(
-                    f"Invalid rule structure: {str(e)}",
+                    _format_rule_error_message(rule_name, f"invalid rule structure: {str(e)}"),
                     error_code="RULE_INVALID_STRUCTURE",
-                    context={'rule': rule, 'error': str(e)}
+                    context={"rule_name": rule_name, "rule": rule, "error": str(e)},
                 ) from e
         else:
             tmp_rule = rule
@@ -375,9 +438,12 @@ def rule_prepare(
         if tmp_rule.type not in ['complex', 'simple']:
             logger.error("Invalid rule type", rule_name=rule_name, rule_type=tmp_rule.type)
             raise RuleCompilationError(
-                f"Invalid rule type: {tmp_rule.type}. Must be 'complex' or 'simple'",
+                _format_rule_error_message(
+                    rule_name,
+                    f"invalid rule type '{tmp_rule.type}'. Must be 'complex' or 'simple'",
+                ),
                 error_code="RULE_INVALID_TYPE",
-                context={'rule_name': rule_name, 'rule_type': tmp_rule.type}
+                context={"rule_name": rule_name, "rule_type": tmp_rule.type},
             )
         
         if tmp_rule.type == 'complex':
@@ -385,27 +451,40 @@ def rule_prepare(
             if not hasattr(tmp_rule, 'conditions') or not isinstance(tmp_rule.conditions, dict):
                 logger.error("Invalid conditions structure for complex rule", rule_name=rule_name)
                 raise RuleCompilationError(
-                    f"Complex rule must have 'conditions' dictionary",
+                    _format_rule_error_message(
+                        rule_name,
+                        "complex rule must have 'conditions' dictionary",
+                        conditions_info="rule_type=complex",
+                    ),
                     error_code="RULE_INVALID_CONDITIONS",
-                    context={'rule_name': rule_name, 'rule_type': 'complex'}
+                    context={"rule_name": rule_name, "rule_type": "complex"},
                 )
             
             if 'items' not in tmp_rule.conditions:
                 logger.error("Missing 'items' in complex rule conditions", rule_name=rule_name)
                 raise RuleCompilationError(
-                    f"Complex rule must have 'conditions.items'",
+                    _format_rule_error_message(
+                        rule_name,
+                        "complex rule must have 'conditions.items'",
+                        conditions_info="conditions structure missing 'items'",
+                    ),
                     error_code="RULE_MISSING_CONDITIONS_ITEMS",
-                    context={'rule_name': rule_name}
+                    context={"rule_name": rule_name},
                 )
             
             tmp_conditions = tmp_rule.conditions['items']
             
             if not isinstance(tmp_conditions, list) or len(tmp_conditions) == 0:
                 logger.error("Empty conditions items list", rule_name=rule_name)
+                cond_ids = repr(tmp_conditions) if tmp_conditions is not None else "none"
                 raise RuleCompilationError(
-                    f"Complex rule must have at least one condition item",
+                    _format_rule_error_message(
+                        rule_name,
+                        "complex rule must have at least one condition item",
+                        conditions_info=f"condition_ids={cond_ids}",
+                    ),
                     error_code="RULE_EMPTY_CONDITIONS",
-                    context={'rule_name': rule_name}
+                    context={"rule_name": rule_name, "required_conditions": tmp_conditions},
                 )
             
             # Build condition strings
@@ -430,19 +509,29 @@ def rule_prepare(
             
             if len(tmp_cond_ls) == 0:
                 logger.error("No valid conditions found for complex rule", rule_name=rule_name)
+                cond_info = f"required_condition_ids={tmp_conditions!r}"
                 raise ConfigurationError(
-                    f"No valid conditions found for rule {rule_name}",
+                    _format_rule_error_message(
+                        rule_name,
+                        "no valid conditions found",
+                        conditions_info=cond_info,
+                    ),
                     error_code="CONDITIONS_NOT_FOUND",
-                    context={'rule_name': rule_name, 'required_conditions': tmp_conditions}
+                    context={"rule_name": rule_name, "required_conditions": tmp_conditions},
                 )
             
             # Get logical operator
             if 'mode' not in tmp_rule.conditions:
                 logger.error("Missing 'mode' in complex rule conditions", rule_name=rule_name)
+                cond_info = f"condition_ids={tmp_conditions!r}"
                 raise RuleCompilationError(
-                    f"Complex rule must have 'conditions.mode'",
+                    _format_rule_error_message(
+                        rule_name,
+                        "complex rule must have 'conditions.mode'",
+                        conditions_info=cond_info,
+                    ),
                     error_code="RULE_MISSING_MODE",
-                    context={'rule_name': rule_name}
+                    context={"rule_name": rule_name, "required_conditions": tmp_conditions},
                 )
             
             tmp_logical_operator = logical_operators(tmp_rule.conditions['mode'])
@@ -456,17 +545,25 @@ def rule_prepare(
             if not hasattr(tmp_rule, 'conditions') or not isinstance(tmp_rule.conditions, dict):
                 logger.error("Invalid conditions structure for simple rule", rule_name=rule_name)
                 raise RuleCompilationError(
-                    f"Simple rule must have 'conditions' dictionary",
+                    _format_rule_error_message(
+                        rule_name,
+                        "simple rule must have 'conditions' dictionary",
+                        conditions_info="rule_type=simple",
+                    ),
                     error_code="RULE_INVALID_CONDITIONS",
-                    context={'rule_name': rule_name, 'rule_type': 'simple'}
+                    context={"rule_name": rule_name, "rule_type": "simple"},
                 )
             
             if 'item' not in tmp_rule.conditions:
                 logger.error("Missing 'item' in simple rule conditions", rule_name=rule_name)
                 raise RuleCompilationError(
-                    f"Simple rule must have 'conditions.item'",
+                    _format_rule_error_message(
+                        rule_name,
+                        "simple rule must have 'conditions.item'",
+                        conditions_info="single condition ID expected in 'item'",
+                    ),
                     error_code="RULE_MISSING_CONDITION_ITEM",
-                    context={'rule_name': rule_name}
+                    context={"rule_name": rule_name},
                 )
             
             tmp_condition = tmp_rule.conditions['item']
@@ -486,9 +583,13 @@ def rule_prepare(
                 logger.error("Condition not found in conditions set", 
                            rule_name=rule_name, condition_id=tmp_condition)
                 raise ConfigurationError(
-                    f"Condition {tmp_condition} not found in conditions set for rule {rule_name}",
+                    _format_rule_error_message(
+                        rule_name,
+                        f"condition '{tmp_condition}' not found in conditions set",
+                        conditions_info=f"condition_id={tmp_condition!r}",
+                    ),
                     error_code="CONDITION_NOT_FOUND",
-                    context={'rule_name': rule_name, 'condition_id': tmp_condition}
+                    context={"rule_name": rule_name, "condition_id": tmp_condition},
                 )
             
             tmp_cond_concated_str = tmp_str
@@ -516,9 +617,9 @@ def rule_prepare(
         logger.error("Unexpected error preparing rule", rule_name=rule_name, 
                     error=str(error), exc_info=True)
         raise RuleCompilationError(
-            f"Failed to prepare rule {rule_name}: {str(error)}",
+            _format_rule_error_message(rule_name, f"failed to prepare rule: {str(error)}"),
             error_code="RULE_PREPARE_ERROR",
-            context={'rule_name': rule_name, 'error': str(error)}
+            context={"rule_name": rule_name, "error": str(error)},
         ) from error
 
 

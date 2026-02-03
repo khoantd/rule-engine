@@ -17,7 +17,8 @@ from common.exceptions import ConfigurationError, DataValidationError
 from common.db_models import Rule, Ruleset, RuleStatus
 from common.db_connection import get_db_session
 from common.rule_registry import get_rule_registry
-from common.rule_validator import validate_rule
+from common.rule_validator import validate_rule, validate_rules_set
+from common.config_loader import get_config_loader
 from common.metrics import get_metrics
 
 logger = get_logger(__name__)
@@ -280,13 +281,10 @@ class HotReloadService:
 
     def validate_reload(self) -> Dict[str, Any]:
         """
-        Validate the current rule configuration.
-
-        Args:
-            None
+        Validate the current rule configuration (rules in memory / registry).
 
         Returns:
-            Validation result dictionary
+            Validation result dictionary with valid, errors, total_rules, etc.
         """
         start_time = datetime.utcnow()
 
@@ -298,8 +296,9 @@ class HotReloadService:
                 try:
                     validate_rule(rule)
                 except Exception as e:
+                    rule_name = rule.get("rule_name", rule.get("rule_id", rule.get("rulename", "unknown")))
                     validation_errors.append(
-                        {"rule_id": rule.get("rule_id"), "error": str(e)}
+                        {"rule_name": rule_name, "rule_id": rule.get("rule_id"), "error": str(e)}
                     )
 
             validation_time_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
@@ -333,6 +332,81 @@ class HotReloadService:
                 "validation_time_ms": 0,
                 "timestamp": start_time.isoformat(),
             }
+
+    def validate_from_source(self, source: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Validate rules (and related conditions) loaded from the config repository.
+
+        When the app is configured to use the database, this validates rules and
+        conditions from the DB and returns invalid cases with rule name and
+        condition details in each error message.
+
+        Args:
+            source: Optional source (e.g. ruleset name for DB; file path for file repo).
+                If None, uses the default source from config.
+
+        Returns:
+            Dictionary with:
+                - is_valid: True if all rules are valid
+                - rules: Per-rule results (rule_name, is_valid, errors, warnings)
+                - summary: total_rules, valid_rules, invalid_rules, total_errors, total_warnings
+                - source_type: "database" or "file" (or "s3") for clarity
+        """
+        start_time = datetime.utcnow()
+        repo = get_config_loader().repository
+        name = type(repo).__name__
+        source_type = "database" if "Database" in name else ("s3" if "S3" in name else "file")
+
+        try:
+            if source is not None:
+                rules = repo.read_rules_set(source)
+            else:
+                if type(repo).__name__ == "DatabaseConfigRepository":
+                    rules = repo.read_rules_set(None)
+                else:
+                    rules = get_config_loader().load_rules_set()
+            if not rules:
+                validation_time_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
+                return {
+                    "is_valid": True,
+                    "rules": [],
+                    "summary": {
+                        "total_rules": 0,
+                        "valid_rules": 0,
+                        "invalid_rules": 0,
+                        "total_errors": 0,
+                        "total_warnings": 0,
+                    },
+                    "source_type": source_type,
+                    "validation_time_ms": validation_time_ms,
+                    "timestamp": start_time.isoformat(),
+                }
+            result = validate_rules_set(rules)
+            validation_time_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
+            result["source_type"] = source_type
+            result["validation_time_ms"] = validation_time_ms
+            result["timestamp"] = start_time.isoformat()
+            invalid_rules = [r for r in result["rules"] if not r["is_valid"]]
+            if invalid_rules:
+                logger.warning(
+                    "Validation found invalid rules from source",
+                    source_type=source_type,
+                    invalid_count=len(invalid_rules),
+                    rule_names=[r["rule_name"] for r in invalid_rules],
+                )
+            return result
+        except Exception as e:
+            logger.error(
+                "Failed to validate rules from source",
+                source_type=source_type,
+                error=str(e),
+                exc_info=True,
+            )
+            raise ConfigurationError(
+                f"Failed to validate rules from source: {str(e)}",
+                error_code="VALIDATE_FROM_SOURCE_ERROR",
+                context={"source": source, "source_type": source_type, "error": str(e)},
+            ) from e
 
     def get_status(self) -> Dict[str, Any]:
         """

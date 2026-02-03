@@ -552,8 +552,9 @@ def get_config_repository() -> ConfigRepository:
     if _repository is None:
         config = get_config()
 
-        # Check if database should be used
-        if config.use_database and config.database_url:
+        # Prefer database when DATABASE_URL (or TIMESCALE_SERVICE_URL) is set,
+        # so rules/conditions are loaded from DB instead of flat file.
+        if config.database_url:
             logger.info("Using database configuration repository")
             from common.repository.db_repository import DatabaseConfigRepository
 
