@@ -12,8 +12,8 @@ from common.exceptions import (
     DataValidationError,
     ConfigurationError,
 )
-from common.repository.db_repository import RuleRepository, RulesetRepository
-from common.db_models import Rule, RuleStatus
+from common.repository.db_repository import RuleRepository, RulesetRepository, ConditionRepository
+from common.db_models import Rule, RuleStatus, Condition
 from common.db_connection import get_db_session
 from sqlalchemy.orm import Session
 
@@ -32,6 +32,7 @@ class RuleManagementService:
         self,
         rule_repository: Optional[RuleRepository] = None,
         ruleset_repository: Optional[RulesetRepository] = None,
+        condition_repository: Optional[ConditionRepository] = None,
     ):
         """
         Initialize rule management service.
@@ -39,9 +40,11 @@ class RuleManagementService:
         Args:
             rule_repository: Optional rule repository. If None, creates new instance.
             ruleset_repository: Optional ruleset repository. If None, creates new instance.
+            condition_repository: Optional condition repository. If None, creates new instance.
         """
         self.rule_repository = rule_repository or RuleRepository()
         self.ruleset_repository = ruleset_repository or RulesetRepository()
+        self.condition_repository = condition_repository or ConditionRepository()
         logger.debug("RuleManagementService initialized")
 
     def _get_default_ruleset_id(self) -> int:
@@ -192,31 +195,50 @@ class RuleManagementService:
 
             # Handle conditions - could be inline or reference
             conditions = rule_data.get("conditions", {})
+            extra_metadata = rule_data.get("metadata") or {}
+
+            attribute = ""
+            condition_op = "equal"
+            constant = ""
 
             if isinstance(conditions, dict):
-                # Check if it's inline conditions (has attribute, equation, constant)
-                if "attribute" in conditions:
+                # Check if it's a condition ID mapping (e.g., {"0": "COND1"})
+                # We prioritize condition ID reference if found
+                condition_id = None
+                if "0" in conditions:
+                    condition_id = conditions["0"]
+                elif "condition_id" in conditions:
+                    condition_id = conditions["condition_id"]
+
+                if condition_id:
+                    # Resolve condition
+                    with get_db_session() as session:
+                        cond_model = session.query(Condition).filter(Condition.condition_id == condition_id).first()
+                        if cond_model:
+                            attribute = cond_model.attribute
+                            condition_op = cond_model.operator
+                            constant = cond_model.value
+                            # Store the reference in extra_metadata
+                            if "condition_ids" not in extra_metadata:
+                                extra_metadata["condition_ids"] = conditions
+                        else:
+                            logger.warning("Condition ID reference not found", condition_id=condition_id)
+                            # Fallback or error? For now fallback to empty or ignore
+                
+                # If not resolved by ID and it's inline
+                if not attribute and "attribute" in conditions:
                     attribute = conditions.get("attribute", "")
-                    condition = conditions.get(
+                    condition_op = conditions.get(
                         "equation", conditions.get("condition", "equal")
                     )
                     constant = conditions.get("constant", "")
-                else:
-                    # Reference format - extract from first item
-                    attribute = ""
-                    condition = "equal"
-                    constant = ""
-            else:
-                attribute = ""
-                condition = "equal"
-                constant = ""
 
             # Create rule in database
             rule = self.rule_repository.create_rule(
                 rule_id=rule_id,
                 rule_name=rule_data.get("rule_name", ""),
                 attribute=attribute,
-                condition=condition,
+                condition=condition_op,
                 constant=str(constant),
                 ruleset_id=ruleset_id,
                 message=rule_data.get("description", ""),
@@ -229,6 +251,7 @@ class RuleManagementService:
                 status=RuleStatus.ACTIVE.value,
                 version=rule_data.get("version", "1.0"),
                 created_by=rule_data.get("created_by"),
+                metadata=extra_metadata if extra_metadata else None,
             )
 
             logger.info("Rule created successfully", rule_id=rule_id)
@@ -303,8 +326,29 @@ class RuleManagementService:
             # Handle conditions
             conditions = rule_data.get("conditions")
             if conditions and isinstance(conditions, dict):
+                # Check for condition ID reference
+                condition_id = conditions.get("0") or conditions.get("condition_id")
+                if condition_id:
+                    with get_db_session() as session:
+                        cond_model = session.query(Condition).filter(Condition.condition_id == condition_id).first()
+                        if cond_model:
+                            update_kwargs["attribute"] = cond_model.attribute
+                            update_kwargs["condition"] = cond_model.operator
+                            update_kwargs["constant"] = str(cond_model.value)
+                            
+                            # Update metadata with reference
+                            current_metadata = existing.extra_metadata or {}
+                            current_metadata["condition_ids"] = conditions
+                            update_kwargs["extra_metadata"] = current_metadata
+                
+                # Check for inline updates (if not explicitly a reference OR if referencing failed)
                 if "attribute" in conditions:
                     update_kwargs["attribute"] = conditions["attribute"]
+                    # Clear reference if we are switching back to inline
+                    current_metadata = update_kwargs.get("extra_metadata", existing.extra_metadata or {})
+                    if "condition_ids" in current_metadata:
+                        del current_metadata["condition_ids"]
+                    update_kwargs["extra_metadata"] = current_metadata
                 if "equation" in conditions:
                     update_kwargs["condition"] = conditions["equation"]
                 elif "condition" in conditions:
@@ -399,14 +443,21 @@ class RuleManagementService:
         Returns:
             Dictionary in rule engine format
         """
+        # Determine condition format to return
+        conditions = {
+            "attribute": rule.attribute,
+            "equation": rule.condition,
+            "constant": rule.constant,
+        }
+        
+        # Check if we have a stored reference mapping
+        if rule.extra_metadata and "condition_ids" in rule.extra_metadata:
+            conditions = rule.extra_metadata["condition_ids"]
+
         return {
             "id": rule.rule_id,
             "rule_name": rule.rule_name,
-            "conditions": {
-                "attribute": rule.attribute,
-                "equation": rule.condition,
-                "constant": rule.constant,
-            },
+            "conditions": conditions,
             "description": rule.message,
             "result": rule.action_result,
             "action_result": rule.action_result,
@@ -418,6 +469,7 @@ class RuleManagementService:
             "ruleset_id": rule.ruleset_id,
             "created_at": rule.created_at.isoformat() if rule.created_at else None,
             "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
+            "metadata": rule.extra_metadata,
         }
 
 
