@@ -13,6 +13,7 @@ class RuleExecutionRequest(BaseModel):
     data: Dict[str, Any] = Field(..., description="Input data for rule evaluation")
     dry_run: bool = Field(default=False, description="Execute rules without side effects")
     correlation_id: Optional[str] = Field(default=None, description="Correlation ID for tracing")
+    consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
     
     @validator('data')
     def validate_data(cls, v):
@@ -81,6 +82,7 @@ class BatchRuleExecutionRequest(BaseModel):
     dry_run: bool = Field(default=False, description="Execute rules without side effects")
     max_workers: Optional[int] = Field(default=None, description="Maximum number of parallel workers")
     correlation_id: Optional[str] = Field(default=None, description="Correlation ID for batch tracking")
+    consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
     
     @validator('data_list')
     def validate_data_list(cls, v):
@@ -566,6 +568,7 @@ class DMNRuleExecutionRequest(BaseModel):
     data: Dict[str, Any] = Field(..., description="Input data for rule evaluation")
     dry_run: bool = Field(default=False, description="Execute rules without side effects")
     correlation_id: Optional[str] = Field(default=None, description="Correlation ID for tracing")
+    consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
     
     @validator('data')
     def validate_data(cls, v):

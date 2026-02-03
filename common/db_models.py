@@ -966,3 +966,39 @@ class Consumer(Base):
             if self.last_execution_at
             else None,
         }
+
+class ConsumerRuleUsage(Base):
+    """
+    Consumer Rule Usage model.
+
+    Tracks usage of rules by consumers (count and last execution time).
+    """
+
+    __tablename__ = "consumer_rule_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consumer_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    rule_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    ruleset_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    
+    # Usage stats
+    execution_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_executed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_consumer_usage_lookup", "consumer_id", "rule_id", unique=True),
+    )
+
+    def to_dict(self) -> dict:
+        """Convert model to dictionary."""
+        return {
+            "id": self.id,
+            "consumer_id": self.consumer_id,
+            "rule_id": self.rule_id,
+            "ruleset_id": self.ruleset_id,
+            "execution_count": self.execution_count,
+            "last_executed_at": self.last_executed_at.isoformat() if self.last_executed_at else None,
+        }

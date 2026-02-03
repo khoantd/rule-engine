@@ -14,6 +14,7 @@ from common.logger import get_logger
 from common.exceptions import DataValidationError, RuleEvaluationError, ConfigurationError
 from common.execution_history import get_execution_history
 from common.metrics import get_metrics
+from services.usage_tracking import get_usage_tracking_service
 from typing import Any, Dict, Optional, List
 import time
 import uuid
@@ -61,7 +62,8 @@ def validate_input_data(data: Any) -> Dict[str, Any]:
 def rules_exec(
     data: Any,
     dry_run: bool = False,
-    correlation_id: Optional[str] = None
+    correlation_id: Optional[str] = None,
+    consumer_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Execute rules against input data.
@@ -112,6 +114,7 @@ def rules_exec(
             rule_evaluations: List[Dict[str, Any]] = []
             executed_rules_count = 0
             matched_rules_count = 0
+            matched_rule_ids: List[str] = []
             total_points = 0.0
             
             # Load rules configuration
@@ -184,6 +187,7 @@ def rules_exec(
                     rule_matched = result.get("action_result", "-") != "-"
                     if rule_matched:
                         matched_rules_count += 1
+                        matched_rule_ids.append(rule_id)
                         metrics.increment('rules_matched', dimensions={'rule_name': rule_id})
                     else:
                         metrics.increment('rules_not_matched', dimensions={'rule_name': rule_id})
@@ -323,6 +327,18 @@ def rules_exec(
                 rules_matched=matched_rules_count,
                 rule_evaluations=rule_evaluations if dry_run else None
             )
+
+            # Track consumer usage if consumer_id is provided
+            if consumer_id and matched_rule_ids:
+                try:
+                    tracking_service = get_usage_tracking_service()
+                    tracking_service.track_usage(
+                        consumer_id=consumer_id,
+                        rule_ids=matched_rule_ids,
+                        ruleset_id=None 
+                    )
+                except Exception as e:
+                    logger.warning("Failed to track consumer usage", error=str(e), consumer_id=consumer_id)
             
             return result
             
@@ -360,7 +376,8 @@ def rules_exec_batch(
     data_list: List[Dict[str, Any]],
     dry_run: bool = False,
     max_workers: Optional[int] = None,
-    correlation_id: Optional[str] = None
+    correlation_id: Optional[str] = None,
+    consumer_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Execute rules against multiple data items efficiently.
@@ -404,7 +421,8 @@ def rules_exec_batch(
             result = rules_exec(
                 data=data_item,
                 dry_run=dry_run,
-                correlation_id=item_correlation_id
+                correlation_id=item_correlation_id,
+                consumer_id=consumer_id
             )
             result['item_index'] = index
             result['correlation_id'] = item_correlation_id
@@ -558,6 +576,7 @@ def _execute_decision_rules(
     rule_evaluations = []
     executed_count = 0
     matched_count = 0
+    matched_rule_ids: List[str] = []
     total_points = 0.0
     
     hit_policy = 'UNIQUE'  # Default hit policy
@@ -591,6 +610,7 @@ def _execute_decision_rules(
                 action_result = result.get("action_result", "-")
                 action_results.append(action_result)
                 matched_outputs.append(action_result)
+                matched_rule_ids.append(rule_id)
                 
                 # Collect all outputs from the rule if available
                 rule_outputs = rule.get("outputs", {})
@@ -654,6 +674,7 @@ def _execute_decision_rules(
         'action_results': action_results,
         'executed_count': executed_count,
         'matched_count': matched_count,
+        'matched_rule_ids': matched_rule_ids,
         'total_points': total_points,
         'rule_evaluations': rule_evaluations
     }
@@ -767,7 +788,8 @@ def dmn_rules_exec(
     dmn_content: Optional[str] = None,
     data: Any = None,
     dry_run: bool = False,
-    correlation_id: Optional[str] = None
+    correlation_id: Optional[str] = None,
+    consumer_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Execute rules from a DMN file against input data.
@@ -1001,6 +1023,7 @@ def dmn_rules_exec(
                     # Update counters
                     executed_rules_count += decision_result['executed_count']
                     matched_rules_count += decision_result['matched_count']
+                    matched_rule_ids.extend(decision_result.get('matched_rule_ids', []))
                     total_points += decision_result['total_points']
                     results.extend(decision_result['action_results'])
                     
@@ -1048,6 +1071,7 @@ def dmn_rules_exec(
                 
                 # Convert DMN rules to execution format
                 prepared_rules = []
+                matched_rule_ids: List[str] = []
                 for dmn_rule in rules_set:
                     try:
                         combined_condition = dmn_rule.get('combined_condition')
@@ -1184,6 +1208,9 @@ def dmn_rules_exec(
                                    points=result.get("rule_point"), 
                                    weight=result.get("weight"),
                                    matched=rule_matched)
+                        
+                        if rule_matched:
+                            matched_rule_ids.append(rule_id)
                     
                     except RuleEvaluationError:
                         # Re-raise rule evaluation errors
@@ -1259,6 +1286,18 @@ def dmn_rules_exec(
                 rules_matched=matched_rules_count,
                 rule_evaluations=rule_evaluations if dry_run else None
             )
+
+            # Track consumer usage if consumer_id is provided
+            if consumer_id and matched_rule_ids:
+                try:
+                    tracking_service = get_usage_tracking_service()
+                    tracking_service.track_usage(
+                        consumer_id=consumer_id,
+                        rule_ids=matched_rule_ids,
+                        ruleset_id=None 
+                    )
+                except Exception as e:
+                    logger.warning("Failed to track consumer usage", error=str(e), consumer_id=consumer_id)
             
             return result
             

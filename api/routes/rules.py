@@ -87,7 +87,8 @@ async def execute_rules(
         result = rules_exec(
             data=request.data,
             dry_run=request.dry_run,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
+            consumer_id=request.consumer_id
         )
         
         execution_time_ms = (time.time() - start_time) * 1000
@@ -218,7 +219,8 @@ async def execute_rules_batch(
             data_list=request.data_list,
             dry_run=request.dry_run,
             max_workers=request.max_workers,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
+            consumer_id=request.consumer_id
         )
         
         execution_time_ms = (time.time() - start_time) * 1000
@@ -354,7 +356,8 @@ async def execute_dmn_rules(
             dmn_content=request.dmn_content,
             data=request.data,
             dry_run=request.dry_run,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
+            consumer_id=request.consumer_id
         )
         
         execution_time_ms = (time.time() - start_time) * 1000
@@ -449,6 +452,7 @@ async def execute_dmn_rules_upload(
     file: UploadFile = File(..., description="DMN XML file to upload"),
     data: str = Form(..., description="JSON string containing input data"),
     dry_run: bool = Form(default=False, description="Execute rules without side effects"),
+    consumer_id: Optional[str] = Form(default=None, description="Consumer ID for usage tracking"),
     http_request: Request = None,
     api_key: Optional[str] = Depends(get_api_key)
 ) -> RuleExecutionResponse:
@@ -552,7 +556,8 @@ async def execute_dmn_rules_upload(
             dmn_content=dmn_content,
             data=input_data,
             dry_run=dry_run,
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
+            consumer_id=consumer_id
         )
         
         execution_time_ms = (time.time() - start_time) * 1000
