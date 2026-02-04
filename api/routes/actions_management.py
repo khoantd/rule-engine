@@ -68,10 +68,29 @@ async def list_actions(
     try:
         service = get_actions_management_service()
         actions_data = service.list_actions()
+        actions_metadata = service.list_actions_with_metadata()
         
-        logger.info("API list actions completed", correlation_id=correlation_id, count=len(actions_data))
+        logger.info(
+            "API list actions completed",
+            correlation_id=correlation_id,
+            count=len(actions_data),
+        )
         
-        return ActionsListResponse(actions=actions_data, count=len(actions_data))
+        items = [
+            ActionResponse(
+                id=details.get("id"),
+                pattern=details["pattern"],
+                message=details["message"],
+                ruleset_id=details.get("ruleset_id"),
+            )
+            for details in actions_metadata.values()
+        ]
+        
+        return ActionsListResponse(
+            actions=actions_data,
+            count=len(actions_data),
+            items=items,
+        )
         
     except ConfigurationError as e:
         logger.error("Configuration error listing actions", error=str(e), correlation_id=correlation_id)
@@ -121,23 +140,32 @@ async def get_action(
     
     try:
         service = get_actions_management_service()
-        message = service.get_action(pattern)
+        details = service.get_action_details(pattern)
         
-        if not message:
-            logger.warning("Action not found", correlation_id=correlation_id, pattern=pattern)
+        if not details:
+            logger.warning(
+                "Action not found", correlation_id=correlation_id, pattern=pattern
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
                     "error_type": "NotFoundError",
                     "message": f"Action with pattern '{pattern}' not found",
                     "error_code": "ACTION_NOT_FOUND",
-                    "context": {"pattern": pattern}
-                }
+                    "context": {"pattern": pattern},
+                },
             )
         
-        logger.info("API get action completed", correlation_id=correlation_id, pattern=pattern)
+        logger.info(
+            "API get action completed", correlation_id=correlation_id, pattern=pattern
+        )
         
-        return ActionResponse(pattern=pattern, message=message)
+        return ActionResponse(
+            id=details.get("id"),
+            pattern=details["pattern"],
+            message=details["message"],
+            ruleset_id=details.get("ruleset_id"),
+        )
         
     except DataValidationError as e:
         logger.error("Data validation error getting action", error=str(e), correlation_id=correlation_id)
@@ -196,15 +224,33 @@ async def create_action(
     try:
         service = get_actions_management_service()
         
+        # Create actionset entry
         created_action = service.create_action(request.pattern, request.message)
         
-        # Extract pattern and message from result
-        pattern = list(created_action.keys())[0]
-        message = created_action[pattern]
+        # Determine effective pattern key from creation result
+        pattern_key = list(created_action.keys())[0]
         
-        logger.info("API create action completed", correlation_id=correlation_id, pattern=pattern)
+        # Reload full details including database identifiers
+        details = service.get_action_details(pattern_key)
+        if not details:
+            # Fallback to minimal response if details cannot be loaded for any reason
+            logger.warning(
+                "Created action but failed to load details",
+                correlation_id=correlation_id,
+                pattern=pattern_key,
+            )
+            return ActionResponse(pattern=pattern_key, message=created_action[pattern_key])
         
-        return ActionResponse(pattern=pattern, message=message)
+        logger.info(
+            "API create action completed", correlation_id=correlation_id, pattern=pattern_key
+        )
+        
+        return ActionResponse(
+            id=details.get("id"),
+            pattern=details["pattern"],
+            message=details["message"],
+            ruleset_id=details.get("ruleset_id"),
+        )
         
     except DataValidationError as e:
         logger.error("Data validation error creating action", error=str(e), correlation_id=correlation_id)
@@ -235,7 +281,10 @@ async def create_action(
     response_model=ActionResponse,
     status_code=status.HTTP_200_OK,
     summary="Update an existing action",
-    description="Update an existing action/pattern with a new message."
+    description=(
+        "Update an existing action/pattern with a new message and optionally a new "
+        "pattern string."
+    ),
 )
 async def update_action(
     pattern: str,
@@ -247,8 +296,8 @@ async def update_action(
     Update an existing action/pattern.
     
     Args:
-        pattern: Pattern string
-        request: Action update request with updated message
+        pattern: Existing pattern string (path parameter)
+        request: Action update request with updated message and optional new pattern
         
     Returns:
         Updated action details
@@ -263,15 +312,32 @@ async def update_action(
     try:
         service = get_actions_management_service()
         
-        updated_action = service.update_action(pattern, request.message)
+        updated_action = service.update_action(pattern, request.message, request.pattern)
         
-        # Extract pattern and message from result
+        # Determine effective pattern key from update result
         pattern_key = list(updated_action.keys())[0]
-        message = updated_action[pattern_key]
         
-        logger.info("API update action completed", correlation_id=correlation_id, pattern=pattern)
+        # Reload full details including database identifiers
+        details = service.get_action_details(pattern_key)
+        if not details:
+            # Fallback to minimal response if details cannot be loaded for any reason
+            logger.warning(
+                "Updated action but failed to load details",
+                correlation_id=correlation_id,
+                pattern=pattern_key,
+            )
+            return ActionResponse(pattern=pattern_key, message=updated_action[pattern_key])
         
-        return ActionResponse(pattern=pattern_key, message=message)
+        logger.info(
+            "API update action completed", correlation_id=correlation_id, pattern=pattern
+        )
+        
+        return ActionResponse(
+            id=details.get("id"),
+            pattern=details["pattern"],
+            message=details["message"],
+            ruleset_id=details.get("ruleset_id"),
+        )
         
     except DataValidationError as e:
         logger.error("Data validation error updating action", error=str(e), correlation_id=correlation_id)

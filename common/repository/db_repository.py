@@ -23,6 +23,8 @@ from common.db_models import (
     RuleStatus,
     Base,
     Consumer,
+    Workflow,
+    WorkflowStage,
 )
 from common.db_connection import get_db_session
 from common.logger import get_logger
@@ -389,6 +391,7 @@ class RulesetRepository:
         tags: Optional[List[str]] = None,
         metadata: Optional[dict] = None,
         created_by: Optional[str] = None,
+        session: Optional[Session] = None,
     ) -> Ruleset:
         """
         Create a new ruleset.
@@ -402,11 +405,13 @@ class RulesetRepository:
             tags: List of tags
             metadata: Additional metadata
             created_by: User who created the ruleset
+            session: Optional SQLAlchemy session to use. If provided, this method will not
+                create/commit/close its own session.
 
         Returns:
             Created Ruleset instance
         """
-        with get_db_session() as session:
+        def _create_in_session(db_session: Session) -> Ruleset:
             ruleset = Ruleset(
                 name=name,
                 description=description,
@@ -419,12 +424,19 @@ class RulesetRepository:
                 updated_by=created_by,
             )
 
-            session.add(ruleset)
-            session.flush()  # Flush to get the ID
+            db_session.add(ruleset)
+            db_session.flush()  # Flush to get the ID
 
             logger.info("Ruleset created", ruleset_id=ruleset.id, name=name)
-
             return ruleset
+
+        # If caller provides a Session, use it (avoids detached instances / lazy-load failures).
+        if session is not None:
+            return _create_in_session(session)
+
+        # Backwards compatible behavior: manage our own session when none is provided.
+        with get_db_session() as db_session:
+            return _create_in_session(db_session)
 
     def get_ruleset(self, ruleset_id: int) -> Optional[Ruleset]:
         """
@@ -1120,4 +1132,203 @@ class ActionRepository:
 
             session.delete(action)
             logger.info("Action deleted", action_id=action_id)
+            return True
+
+
+class WorkflowRepository:
+    """
+    Repository for Workflow CRUD operations.
+    """
+
+    def create_workflow(
+        self,
+        name: str,
+        description: Optional[str],
+        stages: List[str],
+        is_active: bool = True,
+        session: Optional[Session] = None,
+    ) -> Workflow:
+        """
+        Create a new workflow with ordered stages.
+
+        Args:
+            name: Workflow name
+            description: Optional description
+            stages: Ordered list of stage names
+            is_active: Initial active flag
+            session: Optional SQLAlchemy session (if provided, caller manages lifecycle)
+
+        Returns:
+            Created Workflow instance
+        """
+
+        def _create(db_session: Session) -> Workflow:
+            workflow = Workflow(
+                name=name,
+                description=description,
+                is_active=is_active,
+            )
+            db_session.add(workflow)
+            db_session.flush()
+
+            for index, stage_name in enumerate(stages, start=1):
+                stage = WorkflowStage(
+                    workflow_id=workflow.id,
+                    name=str(stage_name),
+                    position=index,
+                )
+                db_session.add(stage)
+
+            logger.info("Workflow created", workflow_id=workflow.id, name=name)
+            return workflow
+
+        if session is not None:
+            return _create(session)
+
+        with get_db_session() as db_session:
+            return _create(db_session)
+
+    def get_workflow_by_name(
+        self,
+        name: str,
+        include_inactive: bool = False,
+    ) -> Optional[Workflow]:
+        """
+        Get workflow by name.
+
+        Args:
+            name: Workflow name
+            include_inactive: Whether to include inactive workflows
+
+        Returns:
+            Workflow instance or None
+        """
+        with get_db_session() as session:
+            query = session.query(Workflow).filter(Workflow.name == name)
+            if not include_inactive:
+                query = query.filter(Workflow.is_active.is_(True))
+            return query.first()
+
+    def list_workflows(
+        self,
+        is_active: Optional[bool] = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> List[Workflow]:
+        """
+        List workflows with optional filters and pagination.
+
+        Args:
+            is_active: Optional active flag filter
+            offset: Pagination offset
+            limit: Page size
+
+        Returns:
+            List of Workflow instances
+        """
+        with get_db_session() as session:
+            query = session.query(Workflow)
+            if is_active is not None:
+                query = query.filter(Workflow.is_active.is_(is_active))
+            return (
+                query.order_by(Workflow.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+
+    def update_workflow(
+        self,
+        name: str,
+        description: Optional[Optional[str]] = None,
+        stages: Optional[List[str]] = None,
+        is_active: Optional[bool] = None,
+        session: Optional[Session] = None,
+    ) -> Optional[Workflow]:
+        """
+        Update an existing workflow by name.
+
+        Args:
+            name: Workflow name
+            description: New description (optional, may be None to clear)
+            stages: New ordered list of stages (optional, replaces existing)
+            is_active: New active flag (optional)
+            session: Optional SQLAlchemy session
+
+        Returns:
+            Updated Workflow instance or None if not found
+        """
+
+        def _update(db_session: Session) -> Optional[Workflow]:
+            workflow = (
+                db_session.query(Workflow)
+                .filter(Workflow.name == name)
+                .first()
+            )
+            if not workflow:
+                return None
+
+            if description is not None:
+                workflow.description = description
+            if is_active is not None:
+                workflow.is_active = is_active
+
+            if stages is not None:
+                # Replace existing stages with new ordered list
+                db_session.query(WorkflowStage).filter(
+                    WorkflowStage.workflow_id == workflow.id
+                ).delete()
+                for index, stage_name in enumerate(stages, start=1):
+                    db_session.add(
+                        WorkflowStage(
+                            workflow_id=workflow.id,
+                            name=str(stage_name),
+                            position=index,
+                        )
+                    )
+
+            logger.info("Workflow updated", workflow_id=workflow.id, name=name)
+            return workflow
+
+        if session is not None:
+            return _update(session)
+
+        with get_db_session() as db_session:
+            return _update(db_session)
+
+    def delete_workflow(
+        self,
+        name: str,
+        hard: bool = False,
+    ) -> bool:
+        """
+        Delete (deactivate) a workflow by name.
+
+        Args:
+            name: Workflow name
+            hard: If True, hard-delete the workflow and its stages. Otherwise soft delete.
+
+        Returns:
+            True if workflow was found and deleted/deactivated, False otherwise
+        """
+        with get_db_session() as session:
+            workflow = (
+                session.query(Workflow)
+                .filter(Workflow.name == name)
+                .first()
+            )
+            if not workflow:
+                return False
+
+            if hard:
+                session.delete(workflow)
+                logger.info("Workflow hard-deleted", workflow_id=workflow.id, name=name)
+            else:
+                workflow.is_active = False
+                logger.info(
+                    "Workflow soft-deleted (deactivated)",
+                    workflow_id=workflow.id,
+                    name=name,
+                )
+
             return True

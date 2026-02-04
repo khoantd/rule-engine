@@ -204,6 +204,7 @@ class RuleSetManagementService:
                     tags=ruleset_data.get("tags"),
                     metadata=ruleset_data.get("metadata"),
                     created_by=ruleset_data.get("created_by"),
+                    session=session,
                 )
 
                 # Create actionset entries if provided

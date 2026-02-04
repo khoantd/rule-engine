@@ -1002,3 +1002,100 @@ class ConsumerRuleUsage(Base):
             "execution_count": self.execution_count,
             "last_executed_at": self.last_executed_at.isoformat() if self.last_executed_at else None,
         }
+
+
+class Workflow(Base):
+    """
+    Workflow definition model.
+
+    Represents a named workflow composed of ordered stages. Workflows are
+    global (not tenant-specific) and can be soft-deactivated via is_active.
+    """
+
+    __tablename__ = "workflows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    stages: Mapped[List["WorkflowStage"]] = relationship(
+        "WorkflowStage",
+        back_populates="workflow",
+        cascade="all, delete-orphan",
+        order_by="WorkflowStage.position",
+    )
+
+    __table_args__ = (
+        Index("idx_workflows_is_active", "is_active"),
+    )
+
+    @validates("name")
+    def validate_name(self, key: str, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Workflow name cannot be empty")
+        return value.strip()
+
+    def to_dict(self) -> dict:
+        """Convert workflow model to dictionary compatible with API."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "is_active": bool(self.is_active),
+            "stages": [stage.to_dict() for stage in (self.stages or [])],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class WorkflowStage(Base):
+    """
+    Workflow stage model.
+
+    Represents a single named stage within a workflow at a specific position.
+    """
+
+    __tablename__ = "workflow_stages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workflow_id: Mapped[int] = mapped_column(
+        ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    workflow: Mapped["Workflow"] = relationship("Workflow", back_populates="stages")
+
+    __table_args__ = (
+        Index("idx_workflow_stages_workflow_position", "workflow_id", "position"),
+        Index("idx_workflow_stages_workflow_name", "workflow_id", "name"),
+    )
+
+    @validates("name")
+    def validate_name(self, key: str, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Workflow stage name cannot be empty")
+        return value.strip()
+
+    @validates("position")
+    def validate_position(self, key: str, value: int) -> int:
+        if value is None or value <= 0:
+            raise ValueError("Workflow stage position must be a positive integer")
+        return value
+
+    def to_dict(self) -> dict:
+        """Convert stage model to dictionary compatible with API."""
+        return {
+            "name": self.name,
+            "position": self.position,
+        }

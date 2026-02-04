@@ -12,6 +12,7 @@ from starlette.requests import Request as StarletteRequest
 from api.routes import (
     rules,
     workflow,
+    workflows,
     health,
     rules_management,
     conditions_management,
@@ -86,6 +87,7 @@ app.add_exception_handler(Exception, fastapi_exception_handler)
 app.include_router(health.router)
 app.include_router(rules.router)
 app.include_router(workflow.router)
+app.include_router(workflows.router)
 
 # Include management routers
 app.include_router(rules_management.router)

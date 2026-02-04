@@ -113,6 +113,48 @@ class ActionsManagementService:
                 context={"error": str(e)},
             ) from e
 
+    def list_actions_with_metadata(self) -> Dict[str, Dict[str, Any]]:
+        """
+        List all actionset entries with database metadata.
+
+        Returns:
+            Dictionary keyed by pattern string with values containing id, pattern,
+            message, and ruleset_id.
+        """
+        logger.debug("Listing all actions with metadata")
+        try:
+            with get_db_session() as session:
+                ruleset_id = self._get_default_ruleset_id()
+
+                patterns = (
+                    session.query(Pattern)
+                    .filter(Pattern.ruleset_id == ruleset_id)
+                    .all()
+                )
+
+                result: Dict[str, Dict[str, Any]] = {}
+                for pattern in patterns:
+                    result[pattern.pattern_key] = {
+                        "id": pattern.id,
+                        "pattern": pattern.pattern_key,
+                        "message": pattern.action_recommendation,
+                        "ruleset_id": pattern.ruleset_id,
+                    }
+
+                logger.info(
+                    "Actions with metadata listed successfully", count=len(result)
+                )
+                return result
+        except Exception as e:
+            logger.error(
+                "Failed to list actions with metadata", error=str(e), exc_info=True
+            )
+            raise ConfigurationError(
+                f"Failed to list actions with metadata: {str(e)}",
+                error_code="ACTIONS_LIST_METADATA_ERROR",
+                context={"error": str(e)},
+            ) from e
+
     def get_action(self, pattern: str) -> Optional[str]:
         """
         Get an action by actionset key.
@@ -159,6 +201,63 @@ class ActionsManagementService:
             raise ConfigurationError(
                 f"Failed to get action {pattern}: {str(e)}",
                 error_code="ACTION_GET_ERROR",
+                context={"pattern": pattern, "error": str(e)},
+            ) from e
+
+    def get_action_details(self, pattern: str) -> Optional[Dict[str, Any]]:
+        """
+        Get an actionset entry with database metadata.
+
+        Args:
+            pattern: Actionset key (pattern string, e.g., "YYY", "Y--")
+
+        Returns:
+            Dictionary containing id, pattern, message, and ruleset_id if found,
+            None otherwise.
+
+        Raises:
+            DataValidationError: If pattern is empty
+            ConfigurationError: On database errors
+        """
+        if not pattern or not pattern.strip():
+            raise DataValidationError(
+                "Pattern cannot be empty", error_code="PATTERN_EMPTY"
+            )
+
+        logger.debug("Getting action details", pattern=pattern)
+        try:
+            with get_db_session() as session:
+                ruleset_id = self._get_default_ruleset_id()
+
+                pattern_obj = (
+                    session.query(Pattern)
+                    .filter(
+                        Pattern.ruleset_id == ruleset_id, Pattern.pattern_key == pattern
+                    )
+                    .first()
+                )
+
+                if not pattern_obj:
+                    logger.warning("Action not found", pattern=pattern)
+                    return None
+
+                logger.info("Action details loaded", pattern=pattern)
+                return {
+                    "id": pattern_obj.id,
+                    "pattern": pattern_obj.pattern_key,
+                    "message": pattern_obj.action_recommendation,
+                    "ruleset_id": pattern_obj.ruleset_id,
+                }
+        except Exception as e:
+            logger.error(
+                "Failed to get action details",
+                pattern=pattern,
+                error=str(e),
+                exc_info=True,
+            )
+            raise ConfigurationError(
+                f"Failed to get action details {pattern}: {str(e)}",
+                error_code="ACTION_GET_DETAILS_ERROR",
                 context={"pattern": pattern, "error": str(e)},
             ) from e
 
@@ -228,13 +327,17 @@ class ActionsManagementService:
                 context={"pattern": pattern, "error": str(e)},
             ) from e
 
-    def update_action(self, pattern: str, message: str) -> Dict[str, str]:
+    def update_action(
+        self, old_pattern: str, message: str, new_pattern: Optional[str] = None
+    ) -> Dict[str, str]:
         """
         Update an existing actionset entry.
 
         Args:
-            pattern: Actionset key (pattern string)
+            old_pattern: Existing actionset key (pattern string)
             message: Updated action recommendation message
+            new_pattern: Optional new actionset key (pattern string). If provided and
+                different from old_pattern, the pattern key will be renamed.
 
         Returns:
             Updated action dictionary with pattern and message
@@ -243,7 +346,7 @@ class ActionsManagementService:
             DataValidationError: If pattern is empty, message is empty, or pattern not found
             ConfigurationError: If action cannot be updated
         """
-        if not pattern or not pattern.strip():
+        if not old_pattern or not old_pattern.strip():
             raise DataValidationError(
                 "Pattern cannot be empty", error_code="PATTERN_EMPTY"
             )
@@ -253,48 +356,92 @@ class ActionsManagementService:
                 "Message cannot be empty", error_code="MESSAGE_EMPTY"
             )
 
-        logger.debug("Updating action", pattern=pattern)
+        logger.debug(
+            "Updating action", old_pattern=old_pattern, new_pattern=new_pattern
+        )
 
         try:
             with get_db_session() as session:
                 # Get default ruleset
                 ruleset_id = self._get_default_ruleset_id()
 
-                # Check if actionset entry exists
+                # Check if actionset entry exists for the old pattern
                 pattern_obj = (
                     session.query(Pattern)
                     .filter(
-                        Pattern.ruleset_id == ruleset_id, Pattern.pattern_key == pattern
+                        Pattern.ruleset_id == ruleset_id,
+                        Pattern.pattern_key == old_pattern,
                     )
                     .first()
                 )
 
                 if not pattern_obj:
                     raise DataValidationError(
-                        f"Action with pattern '{pattern}' not found",
+                        f"Action with pattern '{old_pattern}' not found",
                         error_code="PATTERN_NOT_FOUND",
-                        context={"pattern": pattern},
+                        context={"pattern": old_pattern},
                     )
+
+                # Determine effective pattern and optionally rename
+                effective_pattern = old_pattern
+
+                if new_pattern is not None:
+                    new_pattern_stripped = new_pattern.strip()
+                    if not new_pattern_stripped:
+                        raise DataValidationError(
+                            "New pattern cannot be empty",
+                            error_code="PATTERN_EMPTY",
+                        )
+
+                    if new_pattern_stripped != old_pattern:
+                        # Ensure the new pattern does not already exist
+                        existing_with_new_pattern = (
+                            session.query(Pattern)
+                            .filter(
+                                Pattern.ruleset_id == ruleset_id,
+                                Pattern.pattern_key == new_pattern_stripped,
+                            )
+                            .first()
+                        )
+
+                        if existing_with_new_pattern:
+                            raise DataValidationError(
+                                f"Action with pattern '{new_pattern_stripped}' already exists",
+                                error_code="PATTERN_EXISTS",
+                                context={"pattern": new_pattern_stripped},
+                            )
+
+                        pattern_obj.pattern_key = new_pattern_stripped
+                        effective_pattern = new_pattern_stripped
 
                 # Update actionset entry
                 pattern_obj.action_recommendation = message
-                pattern_obj.description = f"Actionset entry {pattern} maps to action: {message}"
+                pattern_obj.description = (
+                    f"Actionset entry {effective_pattern} maps to action: {message}"
+                )
 
                 session.flush()
 
-                logger.info("Action updated successfully", pattern=pattern)
-                return {pattern: message}
+                logger.info(
+                    "Action updated successfully",
+                    old_pattern=old_pattern,
+                    pattern=effective_pattern,
+                )
+                return {effective_pattern: message}
 
         except DataValidationError:
             raise
         except Exception as e:
             logger.error(
-                "Failed to update action", pattern=pattern, error=str(e), exc_info=True
+                "Failed to update action",
+                pattern=old_pattern,
+                error=str(e),
+                exc_info=True,
             )
             raise ConfigurationError(
                 f"Failed to update action: {str(e)}",
                 error_code="ACTION_UPDATE_ERROR",
-                context={"pattern": pattern, "error": str(e)},
+                context={"pattern": old_pattern, "error": str(e)},
             ) from e
 
     def delete_action(self, pattern: str) -> None:

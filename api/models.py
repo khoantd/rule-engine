@@ -220,6 +220,201 @@ class WorkflowExecutionResponse(BaseModel):
         }
 
 
+class WorkflowStageModel(BaseModel):
+    """Represents a single stage in a workflow definition."""
+
+    name: str = Field(..., description="Stage name (e.g. NEW, INPROGESS, FINISHED)")
+    position: int = Field(..., description="1-based order of the stage within the workflow")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "NEW",
+                "position": 2,
+            }
+        }
+
+
+class WorkflowCreateRequest(BaseModel):
+    """Request body for creating a workflow definition."""
+
+    name: str = Field(..., description="Unique workflow name, non-empty, trimmed")
+    description: Optional[str] = Field(None, description="Optional workflow description")
+    stages: List[str] = Field(..., description="Non-empty ordered list of stage names")
+
+    @validator("name")
+    def validate_name(cls, v: str) -> str:
+        """Validate workflow name is non-empty after trimming."""
+        if v is None:
+            raise ValueError("name cannot be None")
+        value = v.strip()
+        if not value:
+            raise ValueError("name cannot be empty")
+        return value
+
+    @validator("stages")
+    def validate_stages(cls, v: List[str]) -> List[str]:
+        """Validate stages list is non-empty and contains non-empty strings."""
+        if not isinstance(v, list) or len(v) == 0:
+            raise ValueError("stages must be a non-empty list")
+        cleaned: List[str] = []
+        for index, stage in enumerate(v):
+            if not isinstance(stage, str):
+                raise ValueError(f"Stage at index {index} must be a string")
+            stage_value = stage.strip()
+            if not stage_value:
+                raise ValueError(f"Stage at index {index} cannot be empty")
+            cleaned.append(stage_value)
+        return cleaned
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "ticket_processing",
+                "description": "Standard ticket workflow",
+                "stages": ["INITIATED", "NEW", "INPROGESS", "FINISHED"],
+            }
+        }
+
+
+class WorkflowUpdateRequest(BaseModel):
+    """Request body for updating a workflow definition."""
+
+    description: Optional[str] = Field(None, description="New workflow description")
+    stages: Optional[List[str]] = Field(
+        None,
+        description="New ordered list of stages. If provided, replaces existing stages.",
+    )
+    is_active: Optional[bool] = Field(
+        None,
+        description="Activate/deactivate workflow (soft delete flag)",
+    )
+
+    @validator("stages")
+    def validate_stages(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        """Validate stages list if provided."""
+        if v is None:
+            return None
+        if not isinstance(v, list) or len(v) == 0:
+            raise ValueError("stages must be a non-empty list when provided")
+        cleaned: List[str] = []
+        for index, stage in enumerate(v):
+            if not isinstance(stage, str):
+                raise ValueError(f"Stage at index {index} must be a string")
+            stage_value = stage.strip()
+            if not stage_value:
+                raise ValueError(f"Stage at index {index} cannot be empty")
+            cleaned.append(stage_value)
+        return cleaned
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "description": "Updated ticket workflow",
+                "stages": ["NEW", "INPROGESS", "FINISHED"],
+                "is_active": True,
+            }
+        }
+
+
+class WorkflowResponse(BaseModel):
+    """Response model for a single workflow definition."""
+
+    name: str = Field(..., description="Workflow name")
+    description: Optional[str] = Field(None, description="Workflow description")
+    is_active: bool = Field(..., description="Whether the workflow is active")
+    stages: List[WorkflowStageModel] = Field(
+        ..., description="Ordered list of workflow stages"
+    )
+    created_at: Optional[str] = Field(None, description="Creation timestamp (ISO 8601)")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp (ISO 8601)")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "ticket_processing",
+                "description": "Standard ticket workflow",
+                "is_active": True,
+                "stages": [
+                    {"name": "INITIATED", "position": 1},
+                    {"name": "NEW", "position": 2},
+                    {"name": "INPROGESS", "position": 3},
+                    {"name": "FINISHED", "position": 4},
+                ],
+                "created_at": "2026-02-04T10:00:00Z",
+                "updated_at": "2026-02-04T10:05:00Z",
+            }
+        }
+
+
+class WorkflowsListResponse(BaseModel):
+    """Response model for listing workflows."""
+
+    workflows: List[WorkflowResponse] = Field(
+        ..., description="List of workflow definitions"
+    )
+    count: int = Field(..., description="Total number of workflows in this result")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "workflows": [
+                    {
+                        "name": "ticket_processing",
+                        "description": "Standard ticket workflow",
+                        "is_active": True,
+                        "stages": [
+                            {"name": "INITIATED", "position": 1},
+                            {"name": "NEW", "position": 2},
+                        ],
+                        "created_at": "2026-02-04T10:00:00Z",
+                        "updated_at": "2026-02-04T10:05:00Z",
+                    }
+                ],
+                "count": 1,
+            }
+        }
+
+
+class WorkflowNamedExecutionRequest(BaseModel):
+    """Request model for executing a workflow by its stored name."""
+
+    workflow_name: str = Field(..., description="Name of the workflow definition to execute")
+    data: Dict[str, Any] = Field(
+        ...,
+        description="Input data passed to the workflow handlers",
+    )
+
+    @validator("workflow_name")
+    def validate_workflow_name(cls, v: str) -> str:
+        """Validate workflow_name is non-empty after trimming."""
+        if v is None:
+            raise ValueError("workflow_name cannot be None")
+        value = v.strip()
+        if not value:
+            raise ValueError("workflow_name cannot be empty")
+        return value
+
+    @validator("data")
+    def validate_data(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate that data is a dictionary."""
+        if not isinstance(v, dict):
+            raise ValueError("data must be a dictionary")
+        return v
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "workflow_name": "ticket_processing",
+                "data": {
+                    "ticket_id": "TICK-123",
+                    "title": "Issue Report",
+                    "priority": "high",
+                },
+            }
+        }
+
+
 class HealthResponse(BaseModel):
     """Response model for health check."""
     
@@ -460,21 +655,42 @@ class ActionCreateRequest(BaseModel):
 class ActionUpdateRequest(BaseModel):
     """Request model for updating an action."""
     
+    pattern: Optional[str] = Field(
+        None,
+        description=(
+            "New pattern string (e.g., 'YYY', 'Y--'). If omitted, the existing pattern "
+            "is unchanged."
+        ),
+    )
     message: str = Field(..., description="Updated action recommendation message")
 
 
 class ActionResponse(BaseModel):
-    """Response model for an action."""
-    
-    pattern: str = Field(..., description="Pattern string")
+    """Response model for an action (pattern entry)."""
+
+    id: Optional[int] = Field(
+        None, description="Internal identifier of the pattern entry"
+    )
+    pattern: str = Field(..., description="Pattern string (e.g., 'YYY', 'Y--')")
     message: str = Field(..., description="Action recommendation")
+    ruleset_id: Optional[int] = Field(
+        None, description="Identifier of the ruleset that owns this pattern"
+    )
 
 
 class ActionsListResponse(BaseModel):
     """Response model for listing actions."""
-    
-    actions: Dict[str, str] = Field(..., description="Dictionary mapping patterns to messages")
+
+    actions: Dict[str, str] = Field(
+        ..., description="Dictionary mapping patterns to messages (backwards compatible)"
+    )
     count: int = Field(..., description="Total number of actions")
+    items: Optional[List[ActionResponse]] = Field(
+        None,
+        description=(
+            "Detailed list of actions including internal identifiers and ruleset metadata"
+        ),
+    )
 
 
 # RuleSet Management Models
