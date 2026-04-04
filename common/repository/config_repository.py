@@ -16,6 +16,7 @@ from common.exceptions import ConfigurationError, StorageError
 from common.json_util import read_json_file, parse_json_v2
 from common.s3_aws_util import aws_s3_config_file_read
 from common.config import get_config
+from common.db_connection import resolve_database_url_optional
 from common.dmn_parser import DMNParser
 
 logger = get_logger(__name__)
@@ -430,9 +431,7 @@ class S3ConfigRepository(ConfigRepository):
 
     def read_conditions_set(self, source: str) -> List[Dict[str, Any]]:
         """Read conditions set from S3."""
-        logger.debug(
-            "Reading conditions set from S3", source=source, bucket=self.bucket
-        )
+        logger.debug("Reading conditions set from S3", source=source, bucket=self.bucket)
         try:
             content = self._read_from_s3(source)
             json_data = json.loads(content)
@@ -540,7 +539,9 @@ def get_config_repository() -> ConfigRepository:
 
     This function returns a repository instance based on the current configuration.
     Priority order:
-    1. Database repository (if USE_DATABASE=true and DATABASE_URL is set)
+    1. Database repository when a database URL can be resolved (TIMESCALE_SERVICE_URL,
+       DATABASE_URL, PG* variables, or DATABASE_ENV_FILE). If USE_DATABASE=true but no
+       URL can be resolved, a warning is logged and S3/file is used.
     2. S3 repository (if S3 bucket is configured)
     3. File repository (default)
 
@@ -552,18 +553,27 @@ def get_config_repository() -> ConfigRepository:
     if _repository is None:
         config = get_config()
 
-        # Prefer database when DATABASE_URL (or TIMESCALE_SERVICE_URL) is set,
-        # so rules/conditions are loaded from DB instead of flat file.
-        if config.database_url:
+        effective_db_url = config.database_url or resolve_database_url_optional(
+            env_file=config.database_env_file
+        )
+
+        if config.use_database and not effective_db_url:
+            logger.warning(
+                "USE_DATABASE=true but no database URL could be resolved; "
+                "loading rules from S3 or file. Set DATABASE_URL or TIMESCALE_SERVICE_URL "
+                "(or PGHOST/PGUSER/PGDATABASE, or DATABASE_ENV_FILE).",
+            )
+
+        # Prefer database whenever a URL is available so the API loads rules from DB
+        # before S3 or local files (matches deployments that use PG* or .env-only URLs).
+        if effective_db_url:
             logger.info("Using database configuration repository")
             from common.repository.db_repository import DatabaseConfigRepository
 
             _repository = DatabaseConfigRepository()
-        # Check if S3 should be used
         elif config.s3_bucket:
             logger.info("Using S3 configuration repository", bucket=config.s3_bucket)
             _repository = S3ConfigRepository(bucket=config.s3_bucket)
-        # Default to file repository
         else:
             logger.info("Using file system configuration repository")
             _repository = FileConfigRepository()
@@ -580,6 +590,4 @@ def set_config_repository(repository: ConfigRepository) -> None:
     """
     global _repository
     _repository = repository
-    logger.debug(
-        "Configuration repository set", repository_type=type(repository).__name__
-    )
+    logger.debug("Configuration repository set", repository_type=type(repository).__name__)

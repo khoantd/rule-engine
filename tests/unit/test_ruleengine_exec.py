@@ -234,3 +234,90 @@ class TestRulesExec:
         # Should continue without action recommendation
         assert result["action_recommendation"] is None
 
+    @patch("services.ruleengine_exec.find_action_recommendation")
+    @patch("services.ruleengine_exec.actions_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
+    @patch("services.ruleengine_exec.conditions_set_load")
+    def test_rules_exec_with_request_rules_inline_complex(
+        self,
+        mock_cond_load,
+        mock_rules_cfg_read,
+        mock_rules_set_setup,
+        mock_rule_run,
+        mock_actions_cfg,
+        mock_find_action,
+        sample_input_data,
+    ):
+        """Request-scoped rules (complex with inline items) skip file rules_set_setup."""
+        mock_cond_load.return_value = []
+        mock_rule_run.return_value = {
+            "action_result": "MATCH",
+            "rule_point": 10.0,
+            "weight": 1.0,
+        }
+        mock_actions_cfg.return_value = {}
+        mock_find_action.return_value = None
+
+        rules = [
+            {
+                "rulename": "rx",
+                "type": "complex",
+                "priority": 1,
+                "conditions": {
+                    "items": [
+                        {
+                            "attribute": "issue",
+                            "equation": "greater_than",
+                            "constant": "30",
+                        },
+                        {
+                            "attribute": "publisher",
+                            "equation": "equal",
+                            "constant": "DC",
+                        },
+                    ],
+                    "mode": "and",
+                },
+                "rulepoint": 10.0,
+                "weight": 1.0,
+                "action_result": "MATCH",
+            }
+        ]
+
+        result = rules_exec(sample_input_data, rules=rules)
+
+        mock_rules_set_setup.assert_not_called()
+        mock_rules_cfg_read.assert_not_called()
+        mock_cond_load.assert_called_once()
+        mock_rule_run.assert_called_once()
+        assert result["total_points"] == 10.0
+        assert result["pattern_result"] == "MATCH"
+
+    @patch("services.ruleengine_exec.conditions_set_load")
+    def test_rules_exec_request_rules_invalid_mode_raises_data_validation(
+        self, mock_cond_load, sample_input_data
+    ):
+        """Invalid complex mode in request rules returns 400 via DataValidationError."""
+        mock_cond_load.return_value = []
+        rules = [
+            {
+                "rulename": "bad",
+                "type": "complex",
+                "priority": 1,
+                "conditions": {
+                    "items": [
+                        {"attribute": "x", "equation": "equal", "constant": "1"},
+                    ],
+                    "mode": "xor",
+                },
+                "rulepoint": 1.0,
+                "weight": 1.0,
+                "action_result": "x",
+            }
+        ]
+        with pytest.raises(DataValidationError) as exc_info:
+            rules_exec(sample_input_data, rules=rules)
+        assert exc_info.value.error_code == "RULE_INVALID_COMPLEX_MODE"
+

@@ -2,7 +2,7 @@
 # Stage 1: Build stage (optional, for future optimization)
 
 # Stage 2: Production stage
-FROM python:3.11-slim as production
+FROM python:3.11-slim AS production
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \

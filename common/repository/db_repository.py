@@ -9,7 +9,7 @@ rulesets, conditions, actions, and actionset entries (stored as Pattern).
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_, or_, desc, asc
 
 from common.repository.config_repository import ConfigRepository
@@ -50,9 +50,7 @@ class DatabaseConfigRepository(ConfigRepository):
             default_ruleset_name: Name of default ruleset to use when no specific ruleset is provided
         """
         self.default_ruleset_name = default_ruleset_name
-        logger.info(
-            "DatabaseConfigRepository initialized", default_ruleset=default_ruleset_name
-        )
+        logger.info("DatabaseConfigRepository initialized", default_ruleset=default_ruleset_name)
 
     def _get_ruleset_by_name(
         self, session: Session, ruleset_name: Optional[str] = None
@@ -255,17 +253,11 @@ class DatabaseConfigRepository(ConfigRepository):
                     ruleset = self._get_default_or_active_ruleset(session)
 
                 if not ruleset:
-                    logger.warning(
-                        "No active ruleset found for actionset", ruleset=source
-                    )
+                    logger.warning("No active ruleset found for actionset", ruleset=source)
                     return {}
 
                 # Get actionset entries (Pattern rows)
-                patterns = (
-                    session.query(Pattern)
-                    .filter(Pattern.ruleset_id == ruleset.id)
-                    .all()
-                )
+                patterns = session.query(Pattern).filter(Pattern.ruleset_id == ruleset.id).all()
 
                 logger.info(
                     "Actionset loaded from database",
@@ -274,10 +266,7 @@ class DatabaseConfigRepository(ConfigRepository):
                 )
 
                 # Convert to dictionary format (pattern_key -> action_recommendation)
-                return {
-                    pattern.pattern_key: pattern.action_recommendation
-                    for pattern in patterns
-                }
+                return {pattern.pattern_key: pattern.action_recommendation for pattern in patterns}
 
         except Exception as e:
             logger.error(
@@ -292,9 +281,7 @@ class DatabaseConfigRepository(ConfigRepository):
                 context={"ruleset": source, "error": str(e)},
             ) from e
 
-    def read_json(
-        self, source: Optional[str] = None
-    ) -> Union[Dict[str, Any], List[Any]]:
+    def read_json(self, source: Optional[str] = None) -> Union[Dict[str, Any], List[Any]]:
         """
         Read configuration as JSON from database.
 
@@ -335,12 +322,37 @@ class DatabaseConfigRepository(ConfigRepository):
         """
         Convert Rule model to dictionary format expected by rule engine.
 
+        If ``metadata.rule_engine`` is set (from API / management), returns the
+        structured ``type`` + ``conditions`` shape used by ``rule_prepare`` so
+        complex rules execute correctly. Otherwise returns the legacy flat format.
+
         Args:
             rule: Rule model instance
 
         Returns:
             Dictionary in rule engine format
         """
+        meta = rule.extra_metadata or {}
+        eng = meta.get("rule_engine")
+        if isinstance(eng, dict) and eng.get("type") in ("simple", "complex"):
+            conds = eng.get("conditions")
+            if isinstance(conds, dict):
+                return {
+                    "id": rule.rule_id,
+                    "rule_name": rule.rule_name,
+                    "rulename": rule.rule_name,
+                    "type": eng["type"],
+                    "conditions": conds,
+                    "description": rule.message or "",
+                    "message": rule.message,
+                    "rulepoint": float(rule.rule_point),
+                    "rule_point": rule.rule_point,
+                    "weight": rule.weight,
+                    "priority": rule.priority,
+                    "action_result": rule.action_result,
+                    "result": rule.action_result,
+                }
+
         return {
             "id": rule.rule_id,
             "rule_name": rule.rule_name,
@@ -411,6 +423,7 @@ class RulesetRepository:
         Returns:
             Created Ruleset instance
         """
+
         def _create_in_session(db_session: Session) -> Ruleset:
             ruleset = Ruleset(
                 name=name,
@@ -787,9 +800,7 @@ class ConditionRepository:
         with get_db_session() as session:
             return session.query(Condition).filter(Condition.id == condition_id).first()
 
-    def list_conditions(
-        self, status: Optional[str] = None, limit: int = 100
-    ) -> List[Condition]:
+    def list_conditions(self, status: Optional[str] = None, limit: int = 100) -> List[Condition]:
         """List conditions with optional filters."""
         with get_db_session() as session:
             query = session.query(Condition)
@@ -802,9 +813,7 @@ class ConditionRepository:
     def delete_condition(self, condition_id: int) -> bool:
         """Delete condition."""
         with get_db_session() as session:
-            condition = (
-                session.query(Condition).filter(Condition.id == condition_id).first()
-            )
+            condition = session.query(Condition).filter(Condition.id == condition_id).first()
 
             if not condition:
                 return False
@@ -898,7 +907,9 @@ class ConsumerRepository:
             with get_db_session() as session:
                 return session.query(Consumer).filter(Consumer.consumer_id == consumer_id).first()
         except Exception as e:
-            logger.error(f"Error in repository get_consumer_by_consumer_id: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error in repository get_consumer_by_consumer_id: {str(e)}", exc_info=True
+            )
             raise
 
     def list_consumers(
@@ -976,11 +987,7 @@ class ConsumerRepository:
     def get_condition_by_condition_id(self, condition_id: str) -> Optional[Condition]:
         """Get condition by condition_id string."""
         with get_db_session() as session:
-            return (
-                session.query(Condition)
-                .filter(Condition.condition_id == condition_id)
-                .first()
-            )
+            return session.query(Condition).filter(Condition.condition_id == condition_id).first()
 
 
 class AttributeRepository:
@@ -1016,9 +1023,7 @@ class AttributeRepository:
             session.add(attribute)
             session.flush()
 
-            logger.info(
-                "Attribute created", attribute_id=attribute.id, name=name
-            )
+            logger.info("Attribute created", attribute_id=attribute.id, name=name)
             return attribute
 
     def get_attribute(self, pk: int) -> Optional[Attribute]:
@@ -1029,15 +1034,9 @@ class AttributeRepository:
     def get_attribute_by_attribute_id(self, attribute_id: str) -> Optional[Attribute]:
         """Get attribute by attribute_id string."""
         with get_db_session() as session:
-            return (
-                session.query(Attribute)
-                .filter(Attribute.attribute_id == attribute_id)
-                .first()
-            )
+            return session.query(Attribute).filter(Attribute.attribute_id == attribute_id).first()
 
-    def list_attributes(
-        self, status: Optional[str] = None, limit: int = 100
-    ) -> List[Attribute]:
+    def list_attributes(self, status: Optional[str] = None, limit: int = 100) -> List[Attribute]:
         """List attributes with optional filters."""
         with get_db_session() as session:
             query = session.query(Attribute)
@@ -1204,7 +1203,11 @@ class WorkflowRepository:
             Workflow instance or None
         """
         with get_db_session() as session:
-            query = session.query(Workflow).filter(Workflow.name == name)
+            query = (
+                session.query(Workflow)
+                .options(selectinload(Workflow.stages))
+                .filter(Workflow.name == name)
+            )
             if not include_inactive:
                 query = query.filter(Workflow.is_active.is_(True))
             return query.first()
@@ -1227,15 +1230,10 @@ class WorkflowRepository:
             List of Workflow instances
         """
         with get_db_session() as session:
-            query = session.query(Workflow)
+            query = session.query(Workflow).options(selectinload(Workflow.stages))
             if is_active is not None:
                 query = query.filter(Workflow.is_active.is_(is_active))
-            return (
-                query.order_by(Workflow.created_at.desc())
-                .offset(offset)
-                .limit(limit)
-                .all()
-            )
+            return query.order_by(Workflow.created_at.desc()).offset(offset).limit(limit).all()
 
     def update_workflow(
         self,
@@ -1262,6 +1260,7 @@ class WorkflowRepository:
         def _update(db_session: Session) -> Optional[Workflow]:
             workflow = (
                 db_session.query(Workflow)
+                .options(selectinload(Workflow.stages))
                 .filter(Workflow.name == name)
                 .first()
             )
@@ -1286,6 +1285,8 @@ class WorkflowRepository:
                             position=index,
                         )
                     )
+                # Sync in-memory relationship before session closes (bulk delete bypasses ORM)
+                db_session.refresh(workflow)
 
             logger.info("Workflow updated", workflow_id=workflow.id, name=name)
             return workflow
@@ -1312,11 +1313,7 @@ class WorkflowRepository:
             True if workflow was found and deleted/deactivated, False otherwise
         """
         with get_db_session() as session:
-            workflow = (
-                session.query(Workflow)
-                .filter(Workflow.name == name)
-                .first()
-            )
+            workflow = session.query(Workflow).filter(Workflow.name == name).first()
             if not workflow:
                 return False
 

@@ -7,14 +7,14 @@
 #
 # Arguments:
 #   --platform PLATFORM   Platform(s) to build for (e.g., linux/amd64, linux/arm64, or linux/amd64,linux/arm64)
-#   --registry REGISTRY   Docker registry URL (e.g., docker.io/khoa0702 or myregistry.io)
+#   --registry REGISTRY   Full image repository path (see --help; not Docker Hub username alone)
 #   --push                Push image to registry after building
 #
 # Examples:
 #   ./build-image.sh
 #   ./build-image.sh --platform linux/amd64
-#   ./build-image.sh --registry docker.io/khoa0702 --push
-#   ./build-image.sh --platform linux/amd64,linux/arm64 --registry docker.io/khoa0702 --push
+#   ./build-image.sh --registry khoa0702/rule-engine --push
+#   ./build-image.sh --platform linux/amd64,linux/arm64 --registry docker.io/khoa0702/rule-engine --push
 #
 
 set -e
@@ -68,9 +68,39 @@ Arguments:
 Examples:
     $0
     $0 --platform linux/amd64
-    $0 --registry docker.io/khoa0702 --push
-    $0 --platform linux/amd64,linux/arm64 --registry docker.io/khoa0702 --push
+    $0 --registry khoa0702/rule-engine --push
+    $0 --platform linux/amd64,linux/arm64 --registry docker.io/khoa0702/rule-engine --push
 EOF
+}
+
+# Normalize --registry to a full repository path. A bare Docker Hub username (e.g. khoa0702)
+# or docker.io/<user> without an image name becomes <user>:latest, which Hub maps to
+# library/<user> and push fails with insufficient_scope.
+normalize_registry_ref() {
+    local r="${1%/}"
+    local default_image="$2"
+    local repo_name
+    repo_name=$(basename "$default_image")
+
+    if [[ -z "$r" ]]; then
+        echo ""
+        return
+    fi
+
+    if [[ "$r" != */* ]]; then
+        echo "${r}/${repo_name}"
+        return
+    fi
+
+    if [[ "$r" == docker.io/* ]] || [[ "$r" == ghcr.io/* ]]; then
+        local after_host="${r#*/}"
+        if [[ "$after_host" != */* ]]; then
+            echo "${r}/${repo_name}"
+            return
+        fi
+    fi
+
+    echo "$r"
 }
 
 # Parse command line arguments
@@ -153,9 +183,12 @@ PROJECT_ROOT="$SCRIPT_DIR"
 
 # Determine final image tag
 if [[ -n "$REGISTRY" ]]; then
-    # Remove trailing slash from registry if present
     REGISTRY="${REGISTRY%/}"
-    # Use registry directly as the full image path (e.g., "khoa0702/rule-engine" becomes "khoa0702/rule-engine:latest")
+    _ORIG_REG="$REGISTRY"
+    REGISTRY="$(normalize_registry_ref "$REGISTRY" "$IMAGE_NAME")"
+    if [[ "$_ORIG_REG" != "$REGISTRY" ]]; then
+        print_warn "Adjusted --registry to full repository path: ${_ORIG_REG} -> ${REGISTRY}"
+    fi
     FINAL_TAG="${REGISTRY}:${IMAGE_TAG}"
 else
     FINAL_TAG="$FULL_TAG"

@@ -1,141 +1,230 @@
 # Rule Engine API Documentation
 
-REST API for executing business rules and workflows.
+Comprehensive REST API reference for the Rule Engine service — covering rule execution, management, versioning, A/B testing, hot reload, and workflow orchestration.
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Getting Started](#getting-started)
-- [API Endpoints](#api-endpoints)
-  - [Health Check](#health-check)
-  - [Rule Execution](#rule-execution)
-  - [Batch Rule Execution](#batch-rule-execution)
-  - [Workflow Execution](#workflow-execution)
-- [Authentication](#authentication)
-- [Request/Response Models](#requestresponse-models)
-- [Error Handling](#error-handling)
-- [Examples](#examples)
-- [Configuration](#configuration)
-- [Best Practices](#best-practices)
-- [API Versioning](#api-versioning)
-
-## Overview
-
-The Rule Engine API provides REST endpoints for:
-- **Rule Execution**: Execute business rules against input data
-- **Batch Rule Execution**: Process multiple data items efficiently
-- **Workflow Execution**: Execute multi-stage workflows
-- **Health Checks**: Monitor API service status
-
-### Base URL
-
-Default base URL: `http://localhost:8000`
-
-### API Version
-
-Current API version: `v1`
-
-All endpoints are prefixed with `/api/v1` except health and root endpoints.
-
-## Getting Started
-
-### Installation
-
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Set environment variables (optional):
-```bash
-export API_HOST=0.0.0.0
-export API_PORT=8000
-export API_KEY_ENABLED=false
-```
-
-3. Start the API server:
-```bash
-python run_api.py
-```
-
-Or using uvicorn directly:
-```bash
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-```
-
-### Interactive API Documentation
-
-Once the server is running, access interactive API documentation:
-
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI JSON**: http://localhost:8000/openapi.json
-
-## API Endpoints
-
-### Health Check
-
-#### `GET /health`
-
-Check the health status of the API service.
-
-**Description**: This endpoint provides basic health information about the API service, including status, version, uptime, and environment information. It does not require authentication and can be used for monitoring and load balancer health checks.
-
-**Parameters**: None
-
-**Request Headers**:
-- `Content-Type`: `application/json` (optional)
-- `X-API-Key`: API key (optional, only if authentication is enabled)
-
-**Response**: `200 OK`
-
-**Response Body**:
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "uptime_seconds": 3600.0,
-  "environment": "production"
-}
-```
-
-**Response Fields**:
-- `status` (string, required): Health status - `"healthy"` or `"unhealthy"`
-- `version` (string, required): API version number
-- `timestamp` (datetime, required): Current server timestamp in UTC
-- `uptime_seconds` (float, optional): Application uptime in seconds
-- `environment` (string, optional): Environment name (dev/staging/production)
-
-**Example Request**:
-```bash
-curl http://localhost:8000/health
-```
-
-**Example Response**:
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "timestamp": "2024-01-15T10:30:00.123456Z",
-  "uptime_seconds": 3600.5,
-  "environment": "production"
-}
-```
+> **For AI Agents**: This document is structured for both human readers and AI agents. Each section includes the endpoint signature, all request/response fields with types and constraints, and concrete `curl` examples. Start with the [Architecture Overview](#architecture-overview) to understand how the system works, then consult individual endpoint sections.
 
 ---
 
+## Table of Contents
+
+- [Architecture Overview](#architecture-overview)
+- [Base URL & Versioning](#base-url--versioning)
+- [Authentication](#authentication)
+- [Common Patterns](#common-patterns)
+- [Error Handling](#error-handling)
+- [Endpoints](#endpoints)
+  - [Health & Status](#health--status)
+  - [Rule Execution](#rule-execution)
+  - [Batch Rule Execution](#batch-rule-execution)
+  - [DMN Rule Execution](#dmn-rule-execution)
+  - [Rule Management](#rule-management)
+  - [Condition Management](#condition-management)
+  - [Attribute Management](#attribute-management)
+  - [Action Management](#action-management)
+  - [Ruleset Management](#ruleset-management)
+  - [Workflow Execution](#workflow-execution)
+  - [Workflow Management](#workflow-management)
+  - [Rule Versioning](#rule-versioning)
+  - [A/B Testing](#ab-testing)
+  - [Hot Reload](#hot-reload)
+  - [Consumer Management](#consumer-management)
+  - [WebSocket](#websocket)
+- [Data Models Reference](#data-models-reference)
+- [Configuration Reference](#configuration-reference)
+- [Best Practices](#best-practices)
+
+---
+
+## Architecture Overview
+
+The Rule Engine evaluates a set of business rules against arbitrary input data and returns a scored recommendation.
+
+### Core Concepts
+
+| Concept | Description |
+|--------|-------------|
+| **Attribute** | A named field that can appear in input data (e.g., `issue`, `publisher`). Defines the data type expected. |
+| **Condition** | A single predicate: `attribute` + `equation` + `constant` (e.g., `issue greater_than 30`). |
+| **Rule** | Wraps one or more conditions. Has a `priority`, a `weight`, a `rule_point` value, and an `action_result` string (e.g., `"Y"` or `"N"`). |
+| **Pattern** | Concatenated `action_result` values from all rules in evaluation order (e.g., `"YYN"`). |
+| **Action** | Maps a pattern string to a human-readable recommendation (e.g., `"YYY"` → `"Approved"`). |
+| **Ruleset** | A named collection of rules + their corresponding action mappings. |
+| **Workflow** | An ordered list of named stages. Each stage is handled by a domain handler via the Chain of Responsibility pattern. |
+
+### Execution Flow
+
+```
+Input Data (Dict)
+    │
+    ▼
+Load Rules from Registry / Database / File / S3
+    │
+    ▼
+For each Rule (ordered by priority):
+  - Evaluate Condition against Input Data
+  - If matched → collect action_result ("Y"), add rule_point × weight
+  - If not matched → collect action_result ("N" or "-")
+    │
+    ▼
+Build Pattern Result (concatenate action_results)
+    │
+    ▼
+Lookup Action by Pattern → action_recommendation
+    │
+    ▼
+Return: { total_points, pattern_result, action_recommendation }
+```
+
+### Storage Options
+
+| Source | Config Variable | Description |
+|--------|-----------------|-------------|
+| JSON files | `RULES_CONFIG_PATH` | Default; loads from local JSON files |
+| PostgreSQL / TimescaleDB | `USE_DATABASE=true`, `DATABASE_URL` | Full CRUD via management endpoints |
+| AWS S3 | `S3_BUCKET` | Config stored in S3; useful for cloud deployments |
+
+Rules are cached in an **in-memory registry** (`RuleRegistry`) at startup. The Hot Reload API allows refreshing the registry without restarting the server.
+
+---
+
+## Base URL & Versioning
+
+```
+http://localhost:8000
+```
+
+All resource endpoints are under `/api/v1`. Health and root endpoints are at the top level.
+
+| Prefix | Usage |
+|--------|-------|
+| `/` | Root info |
+| `/health` | Health checks |
+| `/api/v1/rules/` | Rule execution, versioning, A/B testing, hot reload |
+| `/api/v1/management/` | CRUD for rules, conditions, attributes, actions, rulesets |
+| `/api/v1/workflow/` | Workflow execution |
+| `/api/v1/workflows` | Workflow definitions CRUD |
+| `/api/v1/dmn/` | DMN file upload and parsing |
+| `/consumers` | Consumer management |
+
+Interactive docs (Swagger UI) are available at `http://localhost:8000/docs` when the server is running.
+
+---
+
+## Authentication
+
+API key authentication is **disabled by default**. Enable it via environment variables.
+
+### Enable
+
+```bash
+export API_KEY_ENABLED=true
+export API_KEY=your-secret-api-key
+```
+
+### Usage
+
+Include the key in the `X-API-Key` request header:
+
+```bash
+curl -H "X-API-Key: your-secret-api-key" http://localhost:8000/api/v1/rules/execute ...
+```
+
+### Bypass Paths
+
+The following paths bypass authentication regardless of configuration:
+- `GET /` — root info
+- `GET /health` — health check
+- `GET /docs`, `GET /redoc`, `GET /openapi.json` — API documentation
+
+### Error Responses
+
+| Scenario | HTTP Status |
+|---------|-------------|
+| API key required but missing | `401 Unauthorized` |
+| API key provided but invalid | `403 Forbidden` |
+
+---
+
+## Common Patterns
+
+### Correlation IDs
+
+Every request can carry a `correlation_id` for end-to-end tracing. If omitted, the server generates one automatically.
+
+- Sent in request body as `correlation_id` field, or
+- Sent in request header as `X-Correlation-ID`
+- Always returned in response body and `X-Correlation-ID` header
+- Always included in server logs
+
+### Dry Run Mode
+
+Most execution endpoints support `"dry_run": true`. In dry-run mode:
+- Rules are evaluated but **no side effects occur**
+- The response includes detailed per-rule evaluation results (`rule_evaluations`, `would_match`, `would_not_match`)
+- Useful for debugging rule configurations and testing new rules before deployment
+
+### Pagination
+
+List endpoints accept `offset` and `limit` query parameters where supported.
+
+---
+
+## Error Handling
+
+All errors return a consistent JSON body:
+
+```json
+{
+  "error_type": "DataValidationError",
+  "message": "Input data must be a dictionary",
+  "error_code": "DATA_INVALID_TYPE",
+  "context": {
+    "data_type": "str",
+    "expected_type": "dict"
+  },
+  "correlation_id": "req-12345"
+}
+```
+
+### HTTP Status Codes
+
+| Code | Meaning | Cause |
+|------|---------|-------|
+| `200` | OK | Success |
+| `204` | No Content | Successful deletion |
+| `400` | Bad Request | Input validation failed |
+| `401` | Unauthorized | Authentication required |
+| `403` | Forbidden | Invalid API key |
+| `404` | Not Found | Resource does not exist |
+| `409` | Conflict | Duplicate resource |
+| `422` | Unprocessable Entity | Schema validation error |
+| `500` | Internal Server Error | Unexpected server-side failure |
+
+### Error Types
+
+| `error_type` | HTTP | Description |
+|-------------|------|-------------|
+| `DataValidationError` | 400/404/409 | Invalid input or missing/duplicate resource |
+| `ConfigurationError` | 500 | Rule config not found or malformed |
+| `RuleEvaluationError` | 500 | Failure during rule condition evaluation |
+| `WorkflowError` | 500 | Workflow handler not found or stage failure |
+| `SecurityError` | 403 | Authentication/authorization failure |
+| `NotFoundError` | 404 | Resource not found |
+
+---
+
+## Endpoints
+
+---
+
+### Health & Status
+
 #### `GET /`
 
-Root endpoint that provides API information.
+Returns basic API info.
 
-**Description**: Returns basic API information including name, version, and links to documentation endpoints.
-
-**Parameters**: None
-
-**Response**: `200 OK`
-
-**Response Body**:
+**Response `200`**
 ```json
 {
   "name": "Rule Engine API",
@@ -148,20 +237,47 @@ Root endpoint that provides API information.
 
 ---
 
+#### `GET /health`
+
+Returns service health status. Does not require authentication.
+
+**Response `200`**
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "timestamp": "2024-01-15T10:30:00.123456Z",
+  "uptime_seconds": 3600.5,
+  "environment": "production"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `status` | string | Yes | `"healthy"` or `"unhealthy"` |
+| `version` | string | Yes | API version |
+| `timestamp` | datetime (ISO 8601) | Yes | Current UTC time |
+| `uptime_seconds` | float | No | Seconds since server start |
+| `environment` | string | No | `dev` / `staging` / `production` |
+
+---
+
+#### `GET /health/hot-reload`
+
+Returns health status of the hot reload service.
+
+**Response `200`** — Dict with hot reload service status details.
+
+---
+
 ### Rule Execution
 
 #### `POST /api/v1/rules/execute`
 
-Execute business rules against input data.
+Evaluates all loaded rules against a single input data item.
 
-**Description**: Evaluates all configured business rules against the provided input data and returns scoring results with action recommendations. This endpoint supports both normal execution and dry-run mode for testing.
+**Request Body**
 
-**Request Headers**:
-- `Content-Type`: `application/json` (required)
-- `X-API-Key`: API key (optional, required if authentication is enabled)
-- `X-Correlation-ID`: Correlation ID for tracing (optional)
-
-**Request Body**:
 ```json
 {
   "data": {
@@ -170,30 +286,54 @@ Execute business rules against input data.
     "publisher": "DC"
   },
   "dry_run": false,
-  "correlation_id": "req-12345"
+  "correlation_id": "req-12345",
+  "consumer_id": "client-abc"
 }
 ```
 
-**Request Fields**:
-- `data` (object, required): Input data dictionary for rule evaluation. The structure depends on your rule configuration.
-- `dry_run` (boolean, optional): If `true`, executes rules without side effects and returns detailed rule evaluation information. Default: `false`
-- `correlation_id` (string, optional): Correlation ID for request tracing. If not provided, the API will generate one.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `data` | object | Yes | Input data dictionary. Keys should match configured attribute names. |
+| `dry_run` | boolean | No | Default `false`. If `true`, returns detailed per-rule evaluations without side effects. |
+| `correlation_id` | string | No | Tracing ID. Auto-generated if omitted. |
+| `consumer_id` | string | No | Identifies the calling client for usage tracking. |
 
-**Response**: `200 OK`
+**Response `200`** (normal mode)
 
-**Response Body** (normal execution):
 ```json
 {
   "total_points": 1050.0,
   "pattern_result": "YYY",
   "action_recommendation": "Approved",
+  "decision_outputs": null,
+  "rule_evaluations": null,
+  "would_match": null,
+  "would_not_match": null,
   "dry_run": false,
   "execution_time_ms": 45.2,
   "correlation_id": "req-12345"
 }
 ```
 
-**Response Body** (dry run mode):
+**Response `200`** (normal mode, no rules matched — optional fields often `null`)
+
+```json
+{
+  "total_points": 0.0,
+  "pattern_result": "-",
+  "action_recommendation": null,
+  "decision_outputs": null,
+  "rule_evaluations": null,
+  "would_match": null,
+  "would_not_match": null,
+  "dry_run": false,
+  "execution_time_ms": 951.29,
+  "correlation_id": "req-12345"
+}
+```
+
+**Response `200`** (dry run mode)
+
 ```json
 {
   "total_points": 1050.0,
@@ -211,66 +351,61 @@ Execute business rules against input data.
       "execution_time_ms": 2.5
     }
   ],
-  "would_match": [
-    {
-      "rule_name": "Rule 1",
-      "rule_priority": 1,
-      "condition": "issue greater_than 30",
-      "matched": true,
-      "action_result": "Y",
-      "rule_point": 20.0,
-      "weight": 30.0,
-      "execution_time_ms": 2.5
-    }
-  ],
-  "would_not_match": [
-    {
-      "rule_name": "Rule 2",
-      "rule_priority": 2,
-      "condition": "title equals 'Batman'",
-      "matched": false,
-      "action_result": "N",
-      "rule_point": 0.0,
-      "weight": 25.0,
-      "execution_time_ms": 1.2
-    }
-  ],
+  "would_match": [...],
+  "would_not_match": [...],
   "dry_run": true,
   "execution_time_ms": 45.2,
   "correlation_id": "req-12345"
 }
 ```
 
-**Response Fields**:
-- `total_points` (float, required): Sum of weighted rule points from all matched rules
-- `pattern_result` (string, required): Concatenated action results from matched rules (e.g., "YYY", "YNN")
-- `action_recommendation` (string, optional): Recommended action based on pattern matching
-- `rule_evaluations` (array, optional): Detailed evaluation results for each rule. Only included when `dry_run: true`
-- `would_match` (array, optional): Rules that matched. Only included when `dry_run: true`
-- `would_not_match` (array, optional): Rules that didn't match. Only included when `dry_run: true`
-- `dry_run` (boolean, optional): Indicates whether this was a dry run execution
-- `execution_time_ms` (float, optional): Total execution time in milliseconds
-- `correlation_id` (string, optional): Correlation ID for tracing
+| Field | Type | In dry_run only | Description |
+|-------|------|-----------------|-------------|
+| `total_points` | float | No | Sum of `rule_point × weight` for all matched rules |
+| `pattern_result` | string | No | Concatenated `action_result` values (e.g. `"YYN"`); `"-"` when no rule matched (per non-match token) |
+| `action_recommendation` | string or null | No | Recommendation when `pattern_result` matches an actions-config key exactly; otherwise `null` |
+| `rule_evaluations` | array or null | Yes | All rules evaluated with details; `null` when `dry_run` is `false` |
+| `would_match` | array or null | Yes | Rules that matched; `null` when `dry_run` is `false` |
+| `would_not_match` | array or null | Yes | Rules that did not match; `null` when `dry_run` is `false` |
+| `decision_outputs` | object | No | DMN outputs; `null` for JSON `/rules/execute` (use `/rules/execute-dmn` for populated values) |
+| `execution_time_ms` | float | No | Total execution time |
+| `correlation_id` | string | No | Tracing ID |
 
-**Error Responses**:
-- `400 Bad Request`: Invalid input data format
-- `422 Unprocessable Entity`: Validation error
-- `500 Internal Server Error`: Server error during rule execution
+#### When response fields are `null`
+
+Responses use optional JSON members that may be `null` when they do not apply:
+
+| Field | Why `null` |
+|-------|------------|
+| `rule_evaluations`, `would_match`, `would_not_match` | Populated only when **`dry_run` is `true`**. In normal mode the API omits detailed evaluation lists and these fields serialize as `null`. |
+| `decision_outputs` | Set by **DMN** execution paths. **`POST /api/v1/rules/execute`** (JSON rulesets) does not fill this; use **`POST /api/v1/rules/execute-dmn`** (or upload variant) for decision outputs. |
+| `action_recommendation` | Set only when **`pattern_result`** matches a key **exactly** in the actions configuration. Also `null` if actions config is empty, invalid, or failed to load (see server logs). |
+
+**Interpreting a sparse result:** `total_points` of `0.0` with `pattern_result` of `"-"` usually means **no rules matched**—non-matching rules contribute `"-"` to the concatenated pattern, and a single evaluated rule yields exactly `"-"`. Unless your actions map defines a pattern key `"-"`, **`action_recommendation` will be `null`**.
+
+> **Note:** Absent vs `null` for optional fields is normal; clients should treat `null` as “not applicable,” not an error. If you need per-rule detail without changing rules, re-run with **`dry_run: true`**.
+
+**`curl` example**
+
+```bash
+curl -X POST http://localhost:8000/api/v1/rules/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {"issue": 35, "title": "Superman", "publisher": "DC"},
+    "dry_run": false
+  }'
+```
 
 ---
 
+### Batch Rule Execution
+
 #### `POST /api/v1/rules/batch`
 
-Execute rules against multiple data items in batch.
+Evaluates rules against a list of input items, optionally in parallel.
 
-**Description**: Processes multiple input data items efficiently, optionally in parallel. This endpoint is optimized for batch processing scenarios where you need to evaluate rules for many items at once. Each item is processed independently, and failures in one item don't affect others.
+**Request Body**
 
-**Request Headers**:
-- `Content-Type`: `application/json` (required)
-- `X-API-Key`: API key (optional, required if authentication is enabled)
-- `X-Correlation-ID`: Correlation ID for batch tracking (optional)
-
-**Request Body**:
 ```json
 {
   "data_list": [
@@ -279,19 +414,21 @@ Execute rules against multiple data items in batch.
   ],
   "dry_run": false,
   "max_workers": 4,
-  "correlation_id": "batch-12345"
+  "correlation_id": "batch-12345",
+  "consumer_id": "client-abc"
 }
 ```
 
-**Request Fields**:
-- `data_list` (array, required): List of input data dictionaries. Each dictionary represents one item to process. Must contain at least one item.
-- `dry_run` (boolean, optional): If `true`, executes rules without side effects. Default: `false`
-- `max_workers` (integer, optional): Maximum number of parallel workers for processing. If not specified or `null`, the system will automatically determine the optimal number. Must be positive if provided.
-- `correlation_id` (string, optional): Correlation ID for batch tracking. If not provided, the API will generate one.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `data_list` | array of objects | Yes | Must have at least 1 item. Each item is evaluated independently. |
+| `dry_run` | boolean | No | Default `false`. |
+| `max_workers` | integer | No | Number of parallel workers. Must be positive. Auto-determined if omitted. |
+| `correlation_id` | string | No | Batch tracing ID. |
+| `consumer_id` | string | No | Calling client identifier. |
 
-**Response**: `200 OK`
+**Response `200`**
 
-**Response Body**:
 ```json
 {
   "batch_id": "batch-12345",
@@ -307,734 +444,1312 @@ Execute rules against multiple data items in batch.
     {
       "item_index": 1,
       "correlation_id": "batch-12345-1",
-      "status": "success",
-      "total_points": 800.0,
-      "pattern_result": "Y--",
-      "action_recommendation": "Rejected"
+      "status": "failed",
+      "error": "Condition evaluation failed",
+      "error_type": "RuleEvaluationError"
     }
   ],
   "summary": {
     "total_executions": 2,
-    "successful_executions": 2,
-    "failed_executions": 0,
+    "successful_executions": 1,
+    "failed_executions": 1,
     "total_execution_time_ms": 89.5,
     "avg_execution_time_ms": 44.75,
-    "success_rate": 100.0
+    "success_rate": 50.0
   },
   "dry_run": false
 }
 ```
 
-**Response Fields**:
-- `batch_id` (string, required): Unique identifier for this batch execution
-- `results` (array, required): List of execution results, one per input item. Order matches the input `data_list` order.
-  - `item_index` (integer): Zero-based index of the item in the input list
-  - `correlation_id` (string): Correlation ID for this specific item
-  - `status` (string): Execution status - `"success"` or `"failed"`
-  - `total_points` (float, optional): Sum of weighted rule points (only if successful)
-  - `pattern_result` (string, optional): Concatenated action results (only if successful)
-  - `action_recommendation` (string, optional): Recommended action (only if successful)
-  - `error` (string, optional): Error message (only if failed)
-  - `error_type` (string, optional): Error type/class name (only if failed)
-- `summary` (object, required): Batch execution summary statistics
-  - `total_executions` (integer): Total number of items processed
-  - `successful_executions` (integer): Number of successfully processed items
-  - `failed_executions` (integer): Number of failed items
-  - `total_execution_time_ms` (float): Total execution time for the batch in milliseconds
-  - `avg_execution_time_ms` (float): Average execution time per item in milliseconds
-  - `success_rate` (float): Success rate as a percentage (0-100)
-- `dry_run` (boolean, optional): Indicates whether this was a dry run execution
-
-**Error Responses**:
-- `400 Bad Request`: Invalid input data (e.g., empty data_list, invalid max_workers)
-- `422 Unprocessable Entity`: Validation error
-- `500 Internal Server Error`: Server error during batch processing
-
-**Performance Notes**:
-- Batch processing uses parallel execution when `max_workers > 1`
-- The optimal `max_workers` value depends on your system resources and rule complexity
-- Large batches (1000+ items) may take significant time - consider processing in smaller batches
-- Individual item failures are captured in the results but don't stop batch processing
-
----
-
-### Workflow Execution
-
-#### `POST /api/v1/workflow/execute`
-
-Execute a multi-stage workflow.
-
-**Description**: Executes a multi-stage workflow using the Chain of Responsibility pattern. Each stage processes the data through its handler and passes the result to the next stage. This is useful for complex business processes that require sequential processing across multiple stages.
-
-**Request Headers**:
-- `Content-Type`: `application/json` (required)
-- `X-API-Key`: API key (optional, required if authentication is enabled)
-- `X-Correlation-ID`: Correlation ID for tracing (optional)
-
-**Request Body**:
-```json
-{
-  "process_name": "ticket_processing",
-  "stages": ["NEW", "INPROGESS", "FINISHED"],
-  "data": {
-    "ticket_id": "TICK-123",
-    "title": "Issue Report",
-    "priority": "high"
-  }
-}
-```
-
-**Request Fields**:
-- `process_name` (string, required): Name of the process/workflow to execute. Must be a non-empty string.
-- `stages` (array, optional): List of workflow stage names to execute in order. If not provided, default stages will be used: `["NEW", "INPROGESS", "FINISHED"]`. Each stage must be a non-empty string.
-- `data` (object, optional): Input data dictionary to process through the workflow. Defaults to empty dictionary.
-
-**Response**: `200 OK`
-
-**Response Body**:
-```json
-{
-  "process_name": "ticket_processing",
-  "stages": ["NEW", "INPROGESS", "FINISHED"],
-  "result": {
-    "status": "completed",
-    "data": {
-      "ticket_id": "TICK-123",
-      "state": "FINISHED"
-    }
-  },
-  "execution_time_ms": 123.5
-}
-```
-
-**Response Fields**:
-- `process_name` (string, required): Name of the executed process/workflow
-- `stages` (array, required): List of stages that were executed
-- `result` (object, optional): Final workflow result. Structure depends on the workflow handlers.
-- `execution_time_ms` (float, optional): Total execution time in milliseconds
-
-**Error Responses**:
-- `400 Bad Request`: Invalid input (e.g., empty process_name, invalid stage names)
-- `422 Unprocessable Entity`: Validation error
-- `500 Internal Server Error`: Workflow execution error
-
-**Workflow Stages**:
-The workflow system uses handlers for each stage:
-- `NEW`: NewCaseHandler - handles new case initialization
-- `INPROGESS`: InProcessCaseHandler - handles in-progress case processing
-- `FINISHED`: FinishedCaseHandler - handles finished case processing
-
-Custom stages can be configured based on your workflow requirements.
-
-## Authentication
-
-API key authentication is **optional** and can be enabled via environment variables.
-
-### Enable API Key Authentication
-
-1. Set environment variables:
-```bash
-export API_KEY_ENABLED=true
-export API_KEY=your-secret-api-key
-```
-
-2. Include API key in requests:
-```bash
-curl -H "X-API-Key: your-secret-api-key" \
-     -H "Content-Type: application/json" \
-     -X POST http://localhost:8000/api/v1/rules/execute \
-     -d '{"data": {...}}'
-```
-
-### Disable API Key Authentication (Default)
-
-By default, API key authentication is disabled. To explicitly disable:
-
-```bash
-export API_KEY_ENABLED=false
-```
-
-## Request/Response Models
-
-### Rule Execution Request
-
-**Model**: `RuleExecutionRequest`
-
-```typescript
-{
-  data: { [key: string]: any };      // Required: Input data dictionary
-  dry_run?: boolean;                  // Optional: Default false
-  correlation_id?: string;            // Optional: Correlation ID for tracing
-}
-```
-
-**Field Details**:
-- `data` (object, required): Dictionary containing input data for rule evaluation. The structure and fields depend on your configured rules.
-- `dry_run` (boolean, optional): If `true`, executes rules without side effects and returns detailed evaluation information. Default: `false`
-- `correlation_id` (string, optional): Correlation ID for request tracing. If not provided, the API generates one automatically.
-
-### Rule Execution Response
-
-**Model**: `RuleExecutionResponse`
-
-```typescript
-{
-  total_points: number;                              // Required: Sum of weighted points
-  pattern_result: string;                           // Required: Concatenated action results
-  action_recommendation?: string;                    // Optional: Recommended action
-  rule_evaluations?: RuleEvaluationResult[];       // Optional: Detailed evaluations (dry_run only)
-  would_match?: RuleEvaluationResult[];            // Optional: Matched rules (dry_run only)
-  would_not_match?: RuleEvaluationResult[];        // Optional: Unmatched rules (dry_run only)
-  dry_run?: boolean;                                // Optional: Whether this was dry run
-  execution_time_ms?: number;                       // Optional: Execution time in ms
-  correlation_id?: string;                          // Optional: Correlation ID
-}
-```
-
-**Rule Evaluation Result**:
-```typescript
-{
-  rule_name: string;                 // Rule name
-  rule_priority?: number;            // Rule priority (optional)
-  condition: string;                  // Condition string
-  matched: boolean;                   // Whether rule matched
-  action_result: string;              // Action result (e.g., "Y", "N")
-  rule_point: number;                 // Points for this rule
-  weight: number;                     // Weight of this rule
-  execution_time_ms: number;         // Execution time for this rule
-}
-```
-
-### Batch Rule Execution Request
-
-**Model**: `BatchRuleExecutionRequest`
-
-```typescript
-{
-  data_list: { [key: string]: any }[];  // Required: List of data dictionaries (min 1 item)
-  dry_run?: boolean;                     // Optional: Default false
-  max_workers?: number;                  // Optional: Max parallel workers (must be positive)
-  correlation_id?: string;               // Optional: Correlation ID for batch tracking
-}
-```
-
-**Field Details**:
-- `data_list` (array, required): List of input data dictionaries. Each dictionary represents one item to process. Must contain at least one item. All items must be dictionaries.
-- `dry_run` (boolean, optional): If `true`, executes rules without side effects. Default: `false`
-- `max_workers` (integer, optional): Maximum number of parallel workers. If `null` or not provided, the system automatically determines the optimal number. Must be positive if provided.
-- `correlation_id` (string, optional): Correlation ID for batch tracking. If not provided, the API generates one automatically.
-
-### Batch Rule Execution Response
-
-**Model**: `BatchRuleExecutionResponse`
-
-```typescript
-{
-  batch_id: string;                   // Required: Batch execution ID
-  results: BatchItemResult[];         // Required: List of results (one per item)
-  summary: {                           // Required: Batch summary statistics
-    total_executions: number;
-    successful_executions: number;
-    failed_executions: number;
-    total_execution_time_ms: number;
-    avg_execution_time_ms: number;
-    success_rate: number;              // Percentage (0-100)
-  };
-  dry_run?: boolean;                   // Optional: Whether this was dry run
-}
-```
-
-**Batch Item Result**:
-```typescript
-{
-  item_index: number;                 // Zero-based index
-  correlation_id: string;              // Item correlation ID
-  status: string;                      // "success" or "failed"
-  total_points?: number;               // Only if successful
-  pattern_result?: string;             // Only if successful
-  action_recommendation?: string;      // Only if successful
-  error?: string;                      // Only if failed
-  error_type?: string;                 // Only if failed
-}
-```
-
-### Workflow Execution Request
-
-**Model**: `WorkflowExecutionRequest`
-
-```typescript
-{
-  process_name: string;                // Required: Process/workflow name (non-empty)
-  stages?: string[];                    // Optional: Stage names (default: ["NEW", "INPROGESS", "FINISHED"])
-  data?: { [key: string]: any };       // Optional: Input data (default: {})
-}
-```
-
-**Field Details**:
-- `process_name` (string, required): Name of the process/workflow to execute. Must be a non-empty string after trimming.
-- `stages` (array, optional): List of workflow stage names to execute in order. Each stage must be a non-empty string. Defaults to `["NEW", "INPROGESS", "FINISHED"]` if not provided.
-- `data` (object, optional): Input data dictionary to process through the workflow. Defaults to empty dictionary if not provided.
-
-### Workflow Execution Response
-
-**Model**: `WorkflowExecutionResponse`
-
-```typescript
-{
-  process_name: string;                // Required: Process name
-  stages: string[];                    // Required: Executed stages
-  result?: { [key: string]: any };     // Optional: Final workflow result
-  execution_time_ms?: number;          // Optional: Execution time in ms
-}
-```
-
-### Health Response
-
-**Model**: `HealthResponse`
-
-```typescript
-{
-  status: string;                      // Required: "healthy" or "unhealthy"
-  version: string;                     // Required: API version
-  timestamp: string;                   // Required: UTC timestamp (ISO 8601)
-  uptime_seconds?: number;            // Optional: Uptime in seconds
-  environment?: string;               // Optional: Environment name
-}
-```
-
-### Error Response
-
-**Model**: `ErrorResponse`
-
-```typescript
-{
-  error_type: string;                 // Required: Error class name
-  message: string;                     // Required: Human-readable message
-  error_code?: string;                 // Optional: Error code for programmatic handling
-  context?: { [key: string]: any };    // Optional: Additional error context
-  correlation_id?: string;             // Optional: Correlation ID for tracing
-}
-```
-
-## Error Handling
-
-All errors follow a standardized format to ensure consistent error handling across the API.
-
-### Error Response Format
-
-```json
-{
-  "error_type": "ErrorClassName",
-  "message": "Human-readable error message",
-  "error_code": "ERROR_CODE",
-  "context": {
-    "additional": "context",
-    "field_name": "field_value"
-  },
-  "correlation_id": "req-12345"
-}
-```
-
-### HTTP Status Codes
-
-| Status Code | Description | When It Occurs |
-|------------|-------------|----------------|
-| `200 OK` | Request successful | Operation completed successfully |
-| `400 Bad Request` | Invalid input data | Data validation failed, invalid format |
-| `401 Unauthorized` | Authentication required | API key missing or required but not provided |
-| `403 Forbidden` | Access denied | Invalid API key provided |
-| `422 Unprocessable Entity` | Validation error | Request format valid but data validation failed |
-| `500 Internal Server Error` | Server error | Internal processing error, configuration issues |
-
-### Error Types
-
-#### DataValidationError (400)
-
-Occurs when input data is invalid or missing required fields.
-
-**Example**:
-```json
-{
-  "error_type": "DataValidationError",
-  "message": "Input data must be a dictionary",
-  "error_code": "DATA_INVALID_TYPE",
-  "context": {
-    "data_type": "str",
-    "expected_type": "dict"
-  },
-  "correlation_id": "req-12345"
-}
-```
-
-#### ConfigurationError (500)
-
-Occurs when there's a configuration issue that prevents rule execution.
-
-**Example**:
-```json
-{
-  "error_type": "ConfigurationError",
-  "message": "Rules configuration file not found",
-  "error_code": "CONFIG_FILE_NOT_FOUND",
-  "context": {
-    "config_path": "data/input/rules_config_v4.json"
-  },
-  "correlation_id": "req-12345"
-}
-```
-
-#### RuleEvaluationError (500)
-
-Occurs when rule evaluation fails due to an error in rule logic or execution.
-
-**Example**:
-```json
-{
-  "error_type": "RuleEvaluationError",
-  "message": "Error evaluating rule: Rule 1",
-  "error_code": "RULE_EVALUATION_FAILED",
-  "context": {
-    "rule_name": "Rule 1",
-    "rule_index": 0
-  },
-  "correlation_id": "req-12345"
-}
-```
-
-#### WorkflowError (500)
-
-Occurs when workflow execution fails.
-
-**Example**:
-```json
-{
-  "error_type": "WorkflowError",
-  "message": "Workflow stage handler not found",
-  "error_code": "WORKFLOW_HANDLER_NOT_FOUND",
-  "context": {
-    "stage": "CUSTOM_STAGE",
-    "process_name": "ticket_processing"
-  },
-  "correlation_id": "req-12345"
-}
-```
-
-### Error Handling Best Practices
-
-1. **Always check the HTTP status code** first before parsing the response body
-2. **Check the `error_code` field** for programmatic error handling
-3. **Use `correlation_id`** for debugging and support requests
-4. **Check the `context` field** for additional error details
-5. **Implement retry logic** for 500 errors with exponential backoff
-6. **Validate input data** before sending requests to avoid 400/422 errors
-7. **Handle 401/403 errors** by checking API key configuration
-
-### Client-Side Error Handling Example
-
-```python
-import requests
-from requests.exceptions import RequestException
-
-try:
-    response = requests.post(
-        'http://localhost:8000/api/v1/rules/execute',
-        json={'data': {'issue': 35, 'title': 'Superman'}}
-    )
-    response.raise_for_status()
-    result = response.json()
-    print(f"Success: {result['total_points']}")
-except requests.HTTPError as e:
-    if e.response.status_code == 400:
-        error = e.response.json()
-        print(f"Validation Error: {error['message']}")
-    elif e.response.status_code == 500:
-        error = e.response.json()
-        print(f"Server Error: {error['message']}")
-        print(f"Correlation ID: {error.get('correlation_id')}")
-except RequestException as e:
-    print(f"Request failed: {e}")
-```
-
-## Examples
-
-### Example 1: Execute Rules
-
-```bash
-curl -X POST http://localhost:8000/api/v1/rules/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data": {
-      "issue": 35,
-      "title": "Superman",
-      "publisher": "DC"
-    }
-  }'
-```
-
-### Example 2: Execute Rules with Dry Run
-
-```bash
-curl -X POST http://localhost:8000/api/v1/rules/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data": {
-      "issue": 35,
-      "title": "Superman",
-      "publisher": "DC"
-    },
-    "dry_run": true
-  }'
-```
-
-### Example 3: Batch Rule Execution
+| Field | Type | Description |
+|-------|------|-------------|
+| `batch_id` | string | Unique batch ID |
+| `results` | array | One entry per input item, in the same order as `data_list` |
+| `results[].item_index` | integer | Zero-based index into `data_list` |
+| `results[].status` | string | `"success"` or `"failed"` |
+| `results[].error` | string | Present only on failure |
+| `summary.success_rate` | float | Percentage 0–100 |
+
+> Failures in individual items do not abort the batch; they are captured and reported in the result.
+
+**`curl` example**
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/rules/batch \
   -H "Content-Type: application/json" \
   -d '{
     "data_list": [
-      {"issue": 35, "title": "Superman", "publisher": "DC"},
-      {"issue": 10, "title": "Batman", "publisher": "DC"}
+      {"issue": 35, "title": "Superman"},
+      {"issue": 10, "title": "Batman"}
     ],
     "max_workers": 4
   }'
 ```
 
-### Example 4: Execute Workflow
+---
 
-```bash
-curl -X POST http://localhost:8000/api/v1/workflow/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "process_name": "ticket_processing",
-    "stages": ["NEW", "INPROGESS", "FINISHED"],
-    "data": {
-      "ticket_id": "TICK-123",
-      "title": "Issue Report"
-    }
-  }'
+### DMN Rule Execution
+
+DMN (Decision Model Notation) endpoints allow executing rules defined in an external DMN XML file rather than the server's configured ruleset.
+
+#### `POST /api/v1/rules/execute-dmn`
+
+Execute rules from an inline DMN definition.
+
+**Request Body**
+
+```json
+{
+  "dmn_content": "<definitions>...</definitions>",
+  "data": {"issue": 35, "publisher": "DC"},
+  "dry_run": false,
+  "correlation_id": "dmn-req-001"
+}
 ```
 
-### Example 5: Python Client
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `dmn_file` | string | No* | Path to a DMN file on the server filesystem |
+| `dmn_content` | string | No* | Raw DMN XML string |
+| `data` | object | Yes | Input data |
+| `dry_run` | boolean | No | Default `false` |
+| `correlation_id` | string | No | Tracing ID |
+
+*Either `dmn_file` or `dmn_content` must be provided.
+
+**Response `200`** — Same shape as `RuleExecutionResponse` (see [Rule Execution](#rule-execution)). Unlike JSON `/rules/execute`, DMN responses may include **`decision_outputs`** when decisions produce mapped outputs. For when fields are `null` or omitted, see **When response fields are `null`** under Rule Execution above.
+
+---
+
+#### `POST /api/v1/rules/execute-dmn-upload`
+
+Upload and immediately execute a DMN file (multipart form).
+
+**Request** — `multipart/form-data`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | file | Yes | DMN XML file |
+| `data` | string (JSON) | Yes | Input data as JSON string |
+| `dry_run` | boolean | No | Default `false` |
+| `consumer_id` | string | No | Calling client identifier |
+
+**Response `200`** — Same shape as `RuleExecutionResponse`.
+
+---
+
+#### `POST /api/v1/dmn/upload`
+
+Upload a DMN file for parsing without executing it immediately.
+
+**Request** — `multipart/form-data`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | file | Yes | DMN XML file |
+
+**Response `200`**
+
+```json
+{
+  "filename": "rules.dmn",
+  "file_path": "/tmp/uploads/rules.dmn",
+  "rules": [...],
+  "patterns": [...],
+  "rules_count": 5,
+  "correlation_id": "upload-abc123"
+}
+```
+
+---
+
+### Rule Management
+
+Full CRUD for individual rules. Requires the server to be configured with database storage (`USE_DATABASE=true`) or a writable file-based backend.
+
+#### `GET /api/v1/management/rules`
+
+List all rules.
+
+**Response `200`**
+
+```json
+{
+  "rules": [
+    {
+      "id": "rule-001",
+      "rule_name": "High Issue Number",
+      "type": "simple",
+      "conditions": ["cond-001"],
+      "description": "Checks if issue number is high",
+      "result": "Y",
+      "weight": 30.0,
+      "rule_point": 20.0,
+      "priority": 1,
+      "action_result": "Y"
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+#### `GET /api/v1/management/rules/{rule_id}`
+
+Get a single rule by ID.
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `rule_id` | string | Rule ID |
+
+**Response `200`** — Single `RuleResponse` object.
+
+**Response `404`** — Rule not found.
+
+---
+
+#### `POST /api/v1/management/rules`
+
+Create a new rule.
+
+**Request Body**
+
+```json
+{
+  "id": "rule-001",
+  "rule_name": "High Issue Number",
+  "type": "simple",
+  "conditions": ["cond-001"],
+  "description": "Checks if issue number is high",
+  "result": "Y",
+  "weight": 30.0,
+  "rule_point": 20.0,
+  "priority": 1,
+  "action_result": "Y"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique rule identifier |
+| `rule_name` | string | Yes | Human-readable name |
+| `type` | string | No | `"simple"` or `"complex"`. Default `"simple"` |
+| `conditions` | array of strings | Yes | Condition IDs to evaluate |
+| `description` | string | No | Human-readable description |
+| `result` | string | No | Default result |
+| `weight` | float | No | Weight multiplier for scoring |
+| `rule_point` | float | No | Base points for this rule |
+| `priority` | integer | No | Evaluation order (lower = higher priority) |
+| `action_result` | string | No | Result token appended to pattern (e.g., `"Y"`) |
+
+**Response `200`** — Created `RuleResponse`.
+
+**Response `409`** — Rule with that ID already exists.
+
+---
+
+#### `PUT /api/v1/management/rules/{rule_id}`
+
+Update an existing rule. All fields are optional; only provided fields are updated.
+
+**Response `200`** — Updated `RuleResponse`.
+
+**Response `404`** — Rule not found.
+
+---
+
+#### `DELETE /api/v1/management/rules/{rule_id}`
+
+Delete a rule by ID.
+
+**Response `204`** — Deleted successfully.
+
+**Response `404`** — Rule not found.
+
+---
+
+### Condition Management
+
+Conditions define a single predicate: `attribute` `equation` `constant`.
+
+#### `GET /api/v1/management/conditions`
+
+List all conditions.
+
+**Response `200`**
+
+```json
+{
+  "conditions": [
+    {
+      "condition_id": "cond-001",
+      "condition_name": "Issue Greater Than 30",
+      "attribute": "issue",
+      "equation": "greater_than",
+      "constant": 30
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+#### `GET /api/v1/management/conditions/{condition_id}`
+
+Get a single condition.
+
+**Response `200`** — Single `ConditionResponse`.
+
+**Response `404`** — Condition not found.
+
+---
+
+#### `POST /api/v1/management/conditions`
+
+Create a new condition.
+
+**Request Body**
+
+```json
+{
+  "condition_id": "cond-001",
+  "condition_name": "Issue Greater Than 30",
+  "attribute": "issue",
+  "equation": "greater_than",
+  "constant": 30
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `condition_id` | string | Yes | Unique ID |
+| `condition_name` | string | Yes | Human-readable name |
+| `attribute` | string | Yes | Attribute name to evaluate |
+| `equation` | string | Yes | Comparison operator (see below) |
+| `constant` | any | Yes | Value to compare against |
+
+**Supported `equation` values**
+
+| Value | Meaning |
+|-------|---------|
+| `equals` | `attribute == constant` |
+| `not_equals` | `attribute != constant` |
+| `greater_than` | `attribute > constant` |
+| `less_than` | `attribute < constant` |
+| `greater_than_or_equal` | `attribute >= constant` |
+| `less_than_or_equal` | `attribute <= constant` |
+| `contains` | `constant in attribute` |
+| `not_contains` | `constant not in attribute` |
+| `starts_with` | `attribute.startswith(constant)` |
+| `ends_with` | `attribute.endswith(constant)` |
+| `in` | `attribute in [constant values]` |
+| `not_in` | `attribute not in [constant values]` |
+
+**Response `200`** — Created `ConditionResponse`.
+
+---
+
+#### `PUT /api/v1/management/conditions/{condition_id}`
+
+Update a condition. All fields optional.
+
+**Response `200`** — Updated `ConditionResponse`.
+
+---
+
+#### `DELETE /api/v1/management/conditions/{condition_id}`
+
+**Response `204`**
+
+---
+
+### Attribute Management
+
+Attributes are the named data fields that conditions reference. They define the expected data type.
+
+#### `GET /api/v1/management/attributes`
+
+**Response `200`**
+
+```json
+{
+  "attributes": [
+    {
+      "attribute_id": "attr-001",
+      "name": "issue",
+      "data_type": "integer",
+      "description": "Comic issue number",
+      "status": "active",
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+#### `GET /api/v1/management/attributes/{attribute_id}`
+
+**Response `200`** — Single `AttributeResponse`.
+
+---
+
+#### `POST /api/v1/management/attributes`
+
+**Request Body**
+
+```json
+{
+  "attribute_id": "attr-001",
+  "name": "issue",
+  "data_type": "integer",
+  "description": "Comic issue number"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `attribute_id` | string | Yes | Unique ID |
+| `name` | string | Yes | Attribute field name (matches input data keys) |
+| `data_type` | string | Yes | `"string"`, `"integer"`, `"float"`, `"boolean"` |
+| `description` | string | No | Human-readable description |
+
+**Response `200`** — Created `AttributeResponse`.
+
+---
+
+#### `PUT /api/v1/management/attributes/{attribute_id}`
+
+**Response `200`** — Updated `AttributeResponse`.
+
+---
+
+#### `DELETE /api/v1/management/attributes/{attribute_id}`
+
+**Response `204`**
+
+---
+
+### Action Management
+
+Actions map a pattern string to a recommendation message.
+
+#### `GET /api/v1/management/actions`
+
+**Response `200`**
+
+```json
+{
+  "actions": {
+    "YYY": "Approved",
+    "YYN": "Pending Review",
+    "YNN": "Rejected"
+  },
+  "count": 3,
+  "items": [
+    {"id": "act-001", "pattern": "YYY", "message": "Approved", "ruleset_id": "ruleset-1"}
+  ]
+}
+```
+
+---
+
+#### `GET /api/v1/management/actions/{pattern}`
+
+Get an action by its pattern string.
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `pattern` | string | Pattern string (e.g., `YYY`) |
+
+**Response `200`** — Single `ActionResponse`.
+
+---
+
+#### `POST /api/v1/management/actions`
+
+**Request Body**
+
+```json
+{
+  "pattern": "YYY",
+  "message": "Approved",
+  "ruleset_id": "ruleset-1"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `pattern` | string | Yes | Pattern to match (e.g., `"YYN"`) |
+| `message` | string | Yes | Recommendation message |
+| `ruleset_id` | string | No | Ruleset this action belongs to |
+
+**Response `200`** — Created `ActionResponse`.
+
+---
+
+#### `PUT /api/v1/management/actions/{pattern}`
+
+**Response `200`** — Updated `ActionResponse`.
+
+---
+
+#### `DELETE /api/v1/management/actions/{pattern}`
+
+**Response `204`**
+
+---
+
+### Ruleset Management
+
+A ruleset groups a set of rules with their corresponding action mappings.
+
+#### `GET /api/v1/management/rulesets`
+
+**Response `200`**
+
+```json
+{
+  "rulesets": [
+    {
+      "ruleset_name": "comic-scoring",
+      "rules": ["rule-001", "rule-002", "rule-003"],
+      "actionset": [
+        {"pattern": "YYY", "message": "Approved"},
+        {"pattern": "YYN", "message": "Pending Review"}
+      ]
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+#### `GET /api/v1/management/rulesets/{ruleset_name}`
+
+**Response `200`** — Single `RuleSetResponse`.
+
+---
+
+#### `POST /api/v1/management/rulesets`
+
+**Request Body**
+
+```json
+{
+  "ruleset_name": "comic-scoring",
+  "rules": ["rule-001", "rule-002", "rule-003"],
+  "actionset": [
+    {"pattern": "YYY", "message": "Approved"},
+    {"pattern": "YYN", "message": "Pending Review"},
+    {"pattern": "YNN", "message": "Rejected"}
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ruleset_name` | string | Yes | Unique ruleset name |
+| `rules` | array of strings | Yes | Ordered list of rule IDs |
+| `actionset` | array of objects | No | Pattern → message mappings |
+
+**Response `200`** — Created `RuleSetResponse`.
+
+---
+
+#### `PUT /api/v1/management/rulesets/{ruleset_name}`
+
+**Response `200`** — Updated `RuleSetResponse`.
+
+---
+
+#### `DELETE /api/v1/management/rulesets/{ruleset_name}`
+
+**Response `204`**
+
+---
+
+### Workflow Execution
+
+Workflows execute input data through an ordered chain of named stage handlers.
+
+#### `POST /api/v1/workflow/execute`
+
+Execute a workflow with an inline stage definition.
+
+**Request Body**
+
+```json
+{
+  "process_name": "ticket_processing",
+  "stages": ["NEW", "INPROGESS", "FINISHED"],
+  "data": {
+    "ticket_id": "TICK-123",
+    "priority": "high"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `process_name` | string | Yes | Workflow/process identifier |
+| `stages` | array of strings | No | Stage names in execution order. Default: `["NEW", "INPROGESS", "FINISHED"]` |
+| `data` | object | No | Input data. Default: `{}` |
+
+**Built-in stage handlers**
+
+| Stage Name | Handler | Description |
+|-----------|---------|-------------|
+| `NEW` | `NewCaseHandler` | Initializes a new case |
+| `INPROGESS` | `InProcessCaseHandler` | Processes an in-progress case |
+| `FINISHED` | `FinishedCaseHandler` | Finalizes a completed case |
+
+**Response `200`**
+
+```json
+{
+  "process_name": "ticket_processing",
+  "stages": ["NEW", "INPROGESS", "FINISHED"],
+  "result": {
+    "status": "completed",
+    "data": {"ticket_id": "TICK-123", "state": "FINISHED"}
+  },
+  "execution_time_ms": 123.5
+}
+```
+
+---
+
+#### `POST /api/v1/workflow/execute-by-name`
+
+Execute a saved workflow definition by name.
+
+**Request Body**
+
+```json
+{
+  "workflow_name": "comic-review-process",
+  "data": {"issue": 35, "title": "Superman"}
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `workflow_name` | string | Yes | Name of a previously created workflow |
+| `data` | object | No | Input data |
+
+**Response `200`** — Same shape as `WorkflowExecutionResponse`.
+
+---
+
+### Workflow Management
+
+CRUD operations for persisted workflow definitions.
+
+#### `POST /api/v1/workflows`
+
+Create a workflow definition.
+
+**Request Body**
+
+```json
+{
+  "name": "comic-review-process",
+  "description": "Workflow for reviewing comic submissions",
+  "stages": ["NEW", "INPROGESS", "FINISHED"]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique workflow name |
+| `description` | string | No | Human-readable description |
+| `stages` | array of strings | Yes | Stage names in order |
+
+**Response `200`**
+
+```json
+{
+  "name": "comic-review-process",
+  "description": "Workflow for reviewing comic submissions",
+  "is_active": true,
+  "stages": [
+    {"name": "NEW", "position": 1},
+    {"name": "INPROGESS", "position": 2},
+    {"name": "FINISHED", "position": 3}
+  ],
+  "created_at": "2024-01-15T10:00:00Z",
+  "updated_at": "2024-01-15T10:00:00Z"
+}
+```
+
+---
+
+#### `GET /api/v1/workflows`
+
+List all workflows.
+
+**Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `is_active` | boolean | Filter by active status |
+| `offset` | integer | Pagination offset |
+| `limit` | integer | Pagination limit |
+
+**Response `200`** — `{ "workflows": [...], "count": N }`
+
+---
+
+#### `GET /api/v1/workflows/{name}`
+
+Get a workflow by name.
+
+**Response `200`** — Single `WorkflowResponse`.
+
+---
+
+#### `PUT /api/v1/workflows/{name}`
+
+Update a workflow. All fields optional.
+
+**Request Body fields**: `description`, `stages`, `is_active`
+
+**Response `200`** — Updated `WorkflowResponse`.
+
+---
+
+#### `DELETE /api/v1/workflows/{name}`
+
+Delete a workflow. Default is a soft delete.
+
+**Query Parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `hard` | boolean | `false` | If `true`, permanently deletes the workflow |
+
+**Response `204`**
+
+---
+
+### Rule Versioning
+
+Every rule change is tracked in a version history. You can compare versions and roll back.
+
+#### `GET /api/v1/rules/versions/{rule_id}`
+
+Get version history for a rule.
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `rule_id` | string | Rule ID |
+
+**Query Parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | integer | 10 | Max versions to return |
+
+**Response `200`** — Array of version objects with change metadata.
+
+---
+
+#### `GET /api/v1/rules/versions/{rule_id}/current`
+
+Get the current (latest) version of a rule.
+
+**Response `200`** — Version object or `null` if no versions exist.
+
+---
+
+#### `GET /api/v1/rules/versions/{rule_id}/{version_number}`
+
+Get a specific version of a rule.
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `rule_id` | string | Rule ID |
+| `version_number` | integer | Version number |
+
+**Response `200`** — Version object or `null` if not found.
+
+---
+
+#### `POST /api/v1/rules/versions/{rule_id}/compare`
+
+Compare two versions of a rule.
+
+**Request Body**
+
+```json
+{
+  "version_a": 1,
+  "version_b": 3
+}
+```
+
+**Response `200`** — Dict containing field-level differences between the two versions.
+
+---
+
+#### `POST /api/v1/rules/versions/{rule_id}/rollback`
+
+Roll back a rule to a previous version.
+
+**Request Body**
+
+```json
+{
+  "version_number": 2,
+  "change_reason": "Reverted due to regression in scoring"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version_number` | integer | Yes | Version to restore |
+| `change_reason` | string | No | Reason for rollback (stored in version history) |
+
+**Response `200`** — Dict with rollback confirmation and new current version.
+
+---
+
+### A/B Testing
+
+Test two variants of a rule against live traffic before fully committing to a change.
+
+#### `POST /api/v1/rules/ab-tests/`
+
+Create an A/B test.
+
+**Request Body**
+
+```json
+{
+  "test_id": "ab-test-001",
+  "test_name": "High Issue Threshold Test",
+  "rule_id": "rule-001",
+  "ruleset_id": "comic-scoring",
+  "variant_a_version": 1,
+  "variant_b_version": 2,
+  "traffic_split_a": 50,
+  "traffic_split_b": 50,
+  "confidence_level": 0.95
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `test_id` | string | Yes | Unique test identifier |
+| `test_name` | string | Yes | Human-readable name |
+| `rule_id` | string | No* | Rule being tested |
+| `ruleset_id` | string | No* | Ruleset being tested |
+| `variant_a_version` | integer | Yes | Version number for variant A |
+| `variant_b_version` | integer | Yes | Version number for variant B |
+| `traffic_split_a` | float | Yes | % of traffic for A (0–100) |
+| `traffic_split_b` | float | Yes | % of traffic for B (0–100) |
+| `confidence_level` | float | No | Statistical confidence threshold (default 0.95) |
+
+*At least one of `rule_id` or `ruleset_id` is required.
+
+**Response `200`** — Dict with test details and initial status.
+
+---
+
+#### `GET /api/v1/rules/ab-tests/`
+
+List A/B tests.
+
+**Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `rule_id` | string | Filter by rule |
+| `status` | string | Filter by status (`active`, `stopped`, `pending`) |
+| `limit` | integer | Max results |
+
+**Response `200`** — Array of test objects.
+
+---
+
+#### `GET /api/v1/rules/ab-tests/{test_id}`
+
+Get a single A/B test.
+
+**Response `200`** — Test object or `null` if not found.
+
+---
+
+#### `POST /api/v1/rules/ab-tests/{test_id}/start`
+
+Start an A/B test (begin routing traffic to variants).
+
+**Response `200`** — Updated test status.
+
+---
+
+#### `POST /api/v1/rules/ab-tests/{test_id}/stop`
+
+Stop an A/B test.
+
+**Response `200`** — Updated test status.
+
+---
+
+#### `GET /api/v1/rules/ab-tests/{test_id}/metrics`
+
+Get performance metrics for a running or completed A/B test.
+
+**Response `200`** — Dict containing per-variant metrics (execution counts, average points, etc.).
+
+---
+
+#### `POST /api/v1/rules/ab-tests/{test_id}/assign`
+
+Assign a specific requester to a test variant (for consistent assignment).
+
+**Request Body**
+
+```json
+{
+  "assignment_key": "user-xyz"
+}
+```
+
+**Response `200`**
+
+```json
+{
+  "test_id": "ab-test-001",
+  "variant": "A"
+}
+```
+
+---
+
+#### `DELETE /api/v1/rules/ab-tests/{test_id}`
+
+Delete an A/B test.
+
+**Response `204`**
+
+---
+
+### Hot Reload
+
+Reload rules into the in-memory registry without restarting the server.
+
+#### `GET /api/v1/rules/hot-reload/status`
+
+Get the current hot reload service status.
+
+**Response `200`** — Dict with reload service state, last reload timestamp, and loaded rule counts.
+
+---
+
+#### `POST /api/v1/rules/hot-reload/reload`
+
+Reload rules from the configured source (database, file, or S3).
+
+**Request Body**
+
+```json
+{
+  "ruleset_id": "comic-scoring",
+  "rule_id": "rule-001",
+  "force": false,
+  "validate_before_reload": true
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ruleset_id` | string | No | Reload only a specific ruleset |
+| `rule_id` | string | No | Reload only a specific rule |
+| `force` | boolean | No | If `true`, bypasses validation checks |
+| `validate_before_reload` | boolean | No | Default `true`. Validates rules before applying |
+
+**Response `200`** — Dict with reload result and any validation warnings.
+
+---
+
+#### `POST /api/v1/rules/hot-reload/reload/rule/{rule_id}`
+
+Reload a single rule by ID.
+
+**Response `200`** — Reload result.
+
+---
+
+#### `POST /api/v1/rules/hot-reload/reload/ruleset/{ruleset_id}`
+
+Reload an entire ruleset by name.
+
+**Response `200`** — Reload result.
+
+---
+
+#### `POST /api/v1/rules/hot-reload/validate`
+
+Validate the currently loaded rules (in-memory registry).
+
+**Response `200`** — Validation report with any errors or warnings.
+
+---
+
+#### `POST /api/v1/rules/hot-reload/validate-from-source`
+
+Validate rules from the source (database/file) without reloading them.
+
+**Response `200`** — Validation report.
+
+---
+
+#### `POST /api/v1/rules/hot-reload/monitoring/start`
+
+Start continuous monitoring for rule changes (polls source and auto-reloads on change).
+
+**Response `200`** — Monitoring status.
+
+---
+
+#### `POST /api/v1/rules/hot-reload/monitoring/stop`
+
+Stop continuous monitoring.
+
+**Response `200`** — Monitoring status.
+
+---
+
+#### `GET /api/v1/rules/hot-reload/history`
+
+Get the history of past reload operations.
+
+**Query Parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | integer | 10 | Number of historical entries to return |
+
+**Response `200`** — Dict with reload history entries.
+
+---
+
+### Consumer Management
+
+Track and manage API consumers (clients) for usage analytics.
+
+#### `GET /consumers`
+
+List consumers.
+
+**Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `status` | string | Filter by status (`active`, `inactive`) |
+
+**Response `200`**
+
+```json
+{
+  "consumers": [
+    {
+      "id": 1,
+      "consumer_id": "client-abc",
+      "name": "Analytics Service",
+      "description": "Internal analytics pipeline",
+      "status": "active",
+      "tags": ["internal", "analytics"],
+      "metadata": {"team": "data"},
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+#### `GET /consumers/{consumer_id}`
+
+Get a consumer by ID.
+
+**Response `200`** — Single `ConsumerResponse`.
+
+**Response `404`** — Consumer not found.
+
+---
+
+#### `POST /consumers`
+
+Create a consumer.
+
+**Request Body**
+
+```json
+{
+  "consumer_id": "client-abc",
+  "name": "Analytics Service",
+  "description": "Internal analytics pipeline",
+  "status": "active",
+  "tags": ["internal"],
+  "metadata": {"team": "data"}
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `consumer_id` | string | Yes | Unique consumer identifier |
+| `name` | string | Yes | Display name |
+| `description` | string | No | Human-readable description |
+| `status` | string | No | `"active"` (default) or `"inactive"` |
+| `tags` | array of strings | No | Categorization tags |
+| `metadata` | object | No | Arbitrary metadata |
+
+**Response `200`** — Created `ConsumerResponse`.
+
+---
+
+#### `PUT /consumers/{consumer_id}`
+
+Update a consumer. All fields optional.
+
+**Response `200`** — Updated `ConsumerResponse`.
+
+---
+
+#### `DELETE /consumers/{consumer_id}`
+
+Delete a consumer.
+
+**Response `204`**
+
+---
+
+### WebSocket
+
+#### `WS /ws/hot-reload`
+
+Subscribe to real-time hot reload events.
+
+Connect via WebSocket to receive JSON notifications whenever rules are reloaded, validated, or monitoring status changes.
+
+**Example (Python)**
 
 ```python
-import requests
+import asyncio
+import websockets
+import json
 
-# Execute rules
-response = requests.post(
-    'http://localhost:8000/api/v1/rules/execute',
-    json={
-        'data': {
-            'issue': 35,
-            'title': 'Superman',
-            'publisher': 'DC'
-        }
-    }
-)
+async def listen():
+    async with websockets.connect("ws://localhost:8000/ws/hot-reload") as ws:
+        async for message in ws:
+            event = json.loads(message)
+            print(f"Event type: {event['type']}, payload: {event}")
 
-result = response.json()
-print(f"Total Points: {result['total_points']}")
-print(f"Action: {result['action_recommendation']}")
+asyncio.run(listen())
 ```
 
-### Example 6: Python Client with API Key
+**Emitted Event Shape**
 
-```python
-import requests
-
-# Execute rules with API key
-response = requests.post(
-    'http://localhost:8000/api/v1/rules/execute',
-    headers={'X-API-Key': 'your-secret-api-key'},
-    json={
-        'data': {
-            'issue': 35,
-            'title': 'Superman',
-            'publisher': 'DC'
-        }
-    }
-)
-
-result = response.json()
+```json
+{
+  "type": "rules_reloaded",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "ruleset_id": "comic-scoring",
+  "rules_count": 5
+}
 ```
 
-## Configuration
+---
 
-### Environment Variables
+## Data Models Reference
+
+### `RuleEvaluationResult`
+
+Returned per-rule in dry-run responses.
+
+```typescript
+{
+  rule_name: string;
+  rule_priority?: number;
+  condition: string;          // Human-readable condition string
+  matched: boolean;
+  action_result: string;      // e.g. "Y", "N"
+  rule_point: number;
+  weight: number;
+  execution_time_ms: number;
+}
+```
+
+### `ErrorResponse`
+
+```typescript
+{
+  error_type: string;
+  message: string;
+  error_code?: string;
+  context?: Record<string, any>;
+  correlation_id?: string;
+}
+```
+
+### `RuleResponse`
+
+```typescript
+{
+  id: string;
+  rule_name: string;
+  type: string;
+  conditions: string[];
+  description?: string;
+  result?: string;
+  weight?: number;
+  rule_point?: number;
+  priority?: number;
+  action_result?: string;
+}
+```
+
+### `WorkflowResponse`
+
+```typescript
+{
+  name: string;
+  description?: string;
+  is_active: boolean;
+  stages: Array<{ name: string; position: number }>;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+---
+
+## Configuration Reference
+
+All settings can be supplied as environment variables or in `.env` / `config/config.ini`.
+
+### Server
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_HOST` | `0.0.0.0` | Server host address |
-| `API_PORT` | `8000` | Server port |
-| `API_WORKERS` | `1` | Number of worker processes |
-| `API_KEY_ENABLED` | `false` | Enable API key authentication |
-| `API_KEY` | - | API key for authentication (required if enabled) |
-| `CORS_ORIGINS` | `*` | CORS allowed origins (comma-separated) |
-| `ENVIRONMENT` | `dev` | Environment name (dev/staging/prod) |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| `API_HOST` | `0.0.0.0` | Bind address |
+| `API_PORT` | `8000` | Port |
+| `API_WORKERS` | `1` | Number of Uvicorn worker processes |
+| `ENVIRONMENT` | `dev` | `dev` / `staging` / `prod` |
+| `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
 
-### Configuration File
+### Authentication
 
-Configuration can also be managed through `config/config.ini` or environment variables as described in the main README.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_KEY_ENABLED` | `false` | Enable API key auth |
+| `API_KEY` | — | Secret API key |
 
-## Correlation IDs
+### Rule Storage
 
-All requests can include an optional `correlation_id` for tracing. If not provided, the API automatically generates one.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RULES_CONFIG_PATH` | `data/input/rules_config_v4.json` | Local JSON rules file |
+| `CONDITIONS_CONFIG_PATH` | `data/input/conditions_config.json` | Local JSON conditions file |
+| `USE_DATABASE` | `false` | Use PostgreSQL/TimescaleDB |
+| `DATABASE_URL` | — | PostgreSQL connection string |
+| `TIMESCALE_SERVICE_URL` | — | Alternative TimescaleDB connection string |
+| `S3_BUCKET` | — | S3 bucket name for config storage |
+| `S3_CONFIG_PREFIX` | `config/` | S3 key prefix |
 
-The correlation ID is:
-- Included in all response headers as `X-Correlation-ID`
-- Included in all log entries
-- Returned in error responses
+### AWS
 
-### Using Correlation IDs
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AWS_REGION` | `us-east-1` | AWS region |
+| `USE_SSM` | `false` | Load secrets from AWS SSM Parameter Store |
+| `SSM_PREFIX` | `/rule-engine/` | SSM parameter key prefix |
 
-```bash
-# Request with correlation ID
-curl -X POST http://localhost:8000/api/v1/rules/execute \
-  -H "X-Correlation-ID: my-custom-id" \
-  -H "Content-Type: application/json" \
-  -d '{"data": {...}}'
+### Misc
 
-# Response includes correlation ID in header and body
-# X-Correlation-ID: my-custom-id
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CACHE_TTL` | `3600` | Cache time-to-live in seconds |
+| `MAX_RETRIES` | `3` | Max retries for operations |
 
-## Rate Limiting
+**Configuration priority (highest → lowest)**:
+1. Environment variables
+2. `.env` file
+3. `config/config.ini`
+4. Built-in defaults
 
-Rate limiting is not currently implemented but can be added using middleware if needed.
-
-## CORS
-
-CORS is enabled by default for all origins. To restrict origins:
-
-```bash
-export CORS_ORIGINS=https://example.com,https://api.example.com
-```
-
-## Logging
-
-All API requests and responses are logged with:
-- Request method, path, query parameters
-- Response status code
-- Execution time
-- Correlation ID
-- Client IP address
+---
 
 ## Best Practices
 
-### Request Handling
+### For Humans
 
-1. **Always use HTTPS** in production environments
-2. **Include correlation IDs** in all requests for better traceability
-3. **Use appropriate timeouts** for API requests (recommended: 30-60 seconds)
-4. **Implement retry logic** with exponential backoff for transient errors
-5. **Validate input data** before sending to the API
+- **Use `dry_run: true`** when testing new rule configurations before going live.
+- **Include `correlation_id`** in all requests — it appears in server logs and error responses, making debugging much faster.
+- **Use batch endpoint** for bulk processing (more efficient than individual requests). Keep batch sizes under 500 items for predictable latency.
+- **Enable API key auth** in production (`API_KEY_ENABLED=true`).
+- **Restrict CORS origins** in production (`CORS_ORIGINS=https://your-domain.com`).
 
-### Batch Processing
+### For AI Agents
 
-1. **Use batch endpoint** for processing multiple items (more efficient than individual requests)
-2. **Set appropriate `max_workers`** based on your system resources
-3. **Process large batches in chunks** (recommended: 100-500 items per batch)
-4. **Monitor batch summary statistics** to track success rates and performance
+When integrating with the Rule Engine API:
 
-### Performance
+1. **Discover the schema first** — call `GET /health` to confirm the server is up, then `GET /docs` (or `/openapi.json`) to get the OpenAPI spec if you need the full schema.
+2. **Use `correlation_id`** with a unique identifier for every request you make; include it in your own logs to trace calls end-to-end.
+3. **Handle partial batch failures** — a `200` response from `/api/v1/rules/batch` does not mean all items succeeded. Always check `results[].status` and `summary.failed_executions`.
+4. **Use `dry_run: true` for validation** — before deploying a new rule via the management API, execute it in dry-run mode against sample data to verify it behaves as expected.
+5. **Poll hot reload status** via `GET /api/v1/rules/hot-reload/status` after calling reload endpoints to confirm the registry was updated before sending execution requests.
+6. **Error handling**: Retry `5xx` errors with exponential backoff. Do not retry `4xx` errors without changing the request.
+7. **Management operations require database mode** — CRUD endpoints (`/api/v1/management/*`) only persist changes when `USE_DATABASE=true`. In file-based mode they may only update the in-memory registry.
 
-1. **Use dry run mode** for testing rule configurations
-2. **Cache rule configurations** when possible to reduce initialization overhead
-3. **Monitor execution times** using the `execution_time_ms` field in responses
-4. **Use connection pooling** when making multiple requests
+### Error Retry Strategy
 
-### Security
+```python
+import time
+import requests
 
-1. **Enable API key authentication** in production environments
-2. **Store API keys securely** (use environment variables or secret management systems)
-3. **Never commit API keys** to version control
-4. **Use HTTPS** to encrypt data in transit
-5. **Validate and sanitize input data** before sending to the API
-
-### Error Handling
-
-1. **Implement comprehensive error handling** for all error status codes
-2. **Log correlation IDs** for debugging purposes
-3. **Handle partial failures** in batch processing appropriately
-4. **Implement circuit breakers** for repeated failures
-
-## API Versioning
-
-### Current Version: v1
-
-The API uses URL-based versioning. The current version is `v1`, accessible at `/api/v1/*`.
-
-### Version Compatibility
-
-- API version `v1` is the current stable version
-- Breaking changes will result in a new version number
-- Previous versions will be maintained for a deprecation period
-- Version information is available in:
-  - Health endpoint: `/health`
-  - Root endpoint: `/`
-  - OpenAPI specification: `/openapi.json`
-
-### Future Versions
-
-When breaking changes are introduced:
-1. A new version number will be assigned (e.g., `v2`)
-2. Previous versions will remain available
-3. A deprecation notice will be included in responses
-4. Migration guides will be provided
-
-## Rate Limiting
-
-**Current Status**: Rate limiting is not currently implemented.
-
-### Recommendations
-
-For production deployments, consider:
-- Implementing rate limiting at the load balancer or API gateway level
-- Using middleware for rate limiting if needed
-- Monitoring API usage patterns
-- Setting appropriate limits based on your use case
-
-## CORS
-
-Cross-Origin Resource Sharing (CORS) is enabled by default for all origins.
-
-### Configuration
-
-To restrict CORS origins:
-
-```bash
-export CORS_ORIGINS=https://example.com,https://api.example.com
+def execute_with_retry(url, payload, max_retries=3):
+    for attempt in range(max_retries):
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            return response.json()
+        if response.status_code < 500:
+            # Client error — don't retry
+            raise ValueError(response.json().get("message"))
+        # Server error — back off and retry
+        time.sleep(2 ** attempt)
+    raise RuntimeError("Max retries exceeded")
 ```
 
-**Security Note**: Using `*` (default) allows all origins. In production, restrict to specific domains.
-
-## Logging
-
-All API requests and responses are automatically logged with:
-- Request method, path, and query parameters
-- Response status code
-- Execution time
-- Correlation ID
-- Client IP address
-- Error details (if any)
-
-Logs follow structured logging format and can be configured via environment variables:
-- `LOG_LEVEL`: Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-- `ENVIRONMENT`: Set environment name for log context
-
-## Support
-
-For issues or questions:
-- Review the main [README](README.MD)
-- Check interactive API documentation at `/docs`
-- Review error responses for detailed error information
-- Check [API_QUICK_START.md](API_QUICK_START.md) for quick start guide
+---
 
 ## Additional Resources
 
-- **Interactive API Docs (Swagger)**: http://localhost:8000/docs
-- **Alternative Docs (ReDoc)**: http://localhost:8000/redoc
-- **OpenAPI Specification**: http://localhost:8000/openapi.json
-- **Health Check**: http://localhost:8000/health
-
+| Resource | URL |
+|---------|-----|
+| Swagger UI (interactive) | `http://localhost:8000/docs` |
+| ReDoc | `http://localhost:8000/redoc` |
+| OpenAPI JSON | `http://localhost:8000/openapi.json` |
+| Health Check | `http://localhost:8000/health` |
+| Quick Start Guide | [API_QUICK_START.md](API_QUICK_START.md) |
+| Database Setup | [DATABASE_INTEGRATION.md](DATABASE_INTEGRATION.md) |
+| Postman Collection | [Rule_Engine_API.postman_collection.json](Rule_Engine_API.postman_collection.json) |

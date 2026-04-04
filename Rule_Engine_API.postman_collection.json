@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "rule-engine-api-collection",
 		"name": "Rule Engine API",
-		"description": "Complete API collection for Rule Engine service covering all endpoints including rule execution, workflow execution, DMN operations, management APIs, rule versioning, and A/B testing.",
+		"description": "Rule Engine REST API aligned with FastAPI routes: execution (optional consumer_id), workflows, management CRUD, DMN, versioning, A/B tests (trailing slash on list/create), hot reload HTTP API and WebSocket /ws/hot-reload, consumers at /consumers (no /api/v1 prefix). See /docs for schemas.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "rule-engine"
 	},
@@ -45,6 +45,25 @@
 						"description": "Root endpoint that provides API information."
 					},
 					"response": []
+				},
+				{
+					"name": "Hot Reload Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/hot-reload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"hot-reload"
+							]
+						},
+						"description": "Hot reload subsystem health: monitoring, registry stats, and structured checks."
+					},
+					"response": []
 				}
 			],
 			"description": "Health check and API information endpoints"
@@ -69,7 +88,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": false,\n  \"correlation_id\": \"req-12345\"\n}"
+							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": false,\n  \"correlation_id\": \"req-12345\",\n  \"consumer_id\": null\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/rules/execute",
@@ -104,7 +123,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-dry-run-001\"\n}"
+							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-dry-run-001\",\n  \"consumer_id\": null\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/rules/execute",
@@ -119,6 +138,78 @@
 							]
 						},
 						"description": "Execute rules in dry run mode to see detailed rule evaluations without side effects."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute Ruleset",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": false,\n  \"correlation_id\": \"req-ruleset-001\",\n  \"consumer_id\": null\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/{{ruleset_name}}/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"{{ruleset_name}}",
+								"execute"
+							]
+						},
+						"description": "Execute business rules from a specific ruleset against input data. Set the `ruleset_name` variable to the target ruleset (e.g. `default_ruleset`)."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute Ruleset (Dry Run)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-ruleset-dry-001\",\n  \"consumer_id\": null\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/{{ruleset_name}}/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"{{ruleset_name}}",
+								"execute"
+							]
+						},
+						"description": "Execute a specific ruleset in dry run mode to preview detailed per-rule evaluations without side effects."
 					},
 					"response": []
 				},
@@ -139,7 +230,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"data_list\": [\n    {\n      \"issue\": 35,\n      \"title\": \"Superman\",\n      \"publisher\": \"DC\"\n    },\n    {\n      \"issue\": 10,\n      \"title\": \"Batman\",\n      \"publisher\": \"DC\"\n    },\n    {\n      \"issue\": 1,\n      \"title\": \"Spider-Man\",\n      \"publisher\": \"Marvel\"\n    }\n  ],\n  \"dry_run\": false,\n  \"max_workers\": 4,\n  \"correlation_id\": \"batch-12345\"\n}"
+							"raw": "{\n  \"data_list\": [\n    {\n      \"issue\": 35,\n      \"title\": \"Superman\",\n      \"publisher\": \"DC\"\n    },\n    {\n      \"issue\": 10,\n      \"title\": \"Batman\",\n      \"publisher\": \"DC\"\n    },\n    {\n      \"issue\": 1,\n      \"title\": \"Spider-Man\",\n      \"publisher\": \"Marvel\"\n    }\n  ],\n  \"dry_run\": false,\n  \"max_workers\": 4,\n  \"correlation_id\": \"batch-12345\",\n  \"consumer_id\": null\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/rules/batch",
@@ -180,7 +271,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"dmn_file\": \"data/input/sample_rules.dmn\",\n  \"data\": {\n    \"season\": \"Fall\",\n    \"guests\": 6\n  },\n  \"dry_run\": false,\n  \"correlation_id\": \"req-dmn-001\"\n}"
+							"raw": "{\n  \"dmn_file\": \"data/input/sample_rules.dmn\",\n  \"data\": {\n    \"season\": \"Fall\",\n    \"guests\": 6\n  },\n  \"dry_run\": false,\n  \"correlation_id\": \"req-dmn-001\",\n  \"consumer_id\": null\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/rules/execute-dmn",
@@ -215,7 +306,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"dmn_content\": \"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?><dmn:definitions xmlns:dmn=\\\"https://www.omg.org/spec/DMN/20191111/MODEL/\\\" xmlns:feel=\\\"https://www.omg.org/spec/DMN/20191111/FEEL/\\\" id=\\\"sample-rules\\\" name=\\\"Sample Rules\\\"><dmn:decision id=\\\"DishDecision\\\" name=\\\"Dish Decision\\\"><dmn:decisionTable id=\\\"DishTable\\\" hitPolicy=\\\"UNIQUE\\\"><dmn:input id=\\\"SeasonInput\\\" label=\\\"Season\\\"><dmn:inputExpression id=\\\"SeasonExpr\\\" typeRef=\\\"string\\\"><feel:text>season</feel:text></dmn:inputExpression></dmn:input><dmn:output id=\\\"DishOutput\\\" label=\\\"Dish\\\" typeRef=\\\"string\\\"/><dmn:rule id=\\\"Rule1\\\"><dmn:inputEntry id=\\\"Rule1Season\\\"><feel:text>\\\"Winter\\\"</feel:text></dmn:inputEntry><dmn:outputEntry id=\\\"Rule1Dish\\\"><feel:text>\\\"Roastbeef\\\"</feel:text></dmn:outputEntry></dmn:rule></dmn:decisionTable></dmn:decision></dmn:definitions>\",\n  \"data\": {\n    \"season\": \"Winter\",\n    \"guests\": 5\n  },\n  \"dry_run\": false\n}"
+							"raw": "{\n  \"dmn_content\": \"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?><dmn:definitions xmlns:dmn=\\\"https://www.omg.org/spec/DMN/20191111/MODEL/\\\" xmlns:feel=\\\"https://www.omg.org/spec/DMN/20191111/FEEL/\\\" id=\\\"sample-rules\\\" name=\\\"Sample Rules\\\"><dmn:decision id=\\\"DishDecision\\\" name=\\\"Dish Decision\\\"><dmn:decisionTable id=\\\"DishTable\\\" hitPolicy=\\\"UNIQUE\\\"><dmn:input id=\\\"SeasonInput\\\" label=\\\"Season\\\"><dmn:inputExpression id=\\\"SeasonExpr\\\" typeRef=\\\"string\\\"><feel:text>season</feel:text></dmn:inputExpression></dmn:input><dmn:output id=\\\"DishOutput\\\" label=\\\"Dish\\\" typeRef=\\\"string\\\"/><dmn:rule id=\\\"Rule1\\\"><dmn:inputEntry id=\\\"Rule1Season\\\"><feel:text>\\\"Winter\\\"</feel:text></dmn:inputEntry><dmn:outputEntry id=\\\"Rule1Dish\\\"><feel:text>\\\"Roastbeef\\\"</feel:text></dmn:outputEntry></dmn:rule></dmn:decisionTable></dmn:decision></dmn:definitions>\",\n  \"data\": {\n    \"season\": \"Winter\",\n    \"guests\": 5\n  },\n  \"dry_run\": false,\n  \"consumer_id\": null\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/rules/execute-dmn",
@@ -270,6 +361,13 @@
 									"value": "req-dmn-upload-001",
 									"type": "text",
 									"description": "Correlation ID for request tracing"
+								},
+								{
+									"key": "consumer_id",
+									"value": "",
+									"type": "text",
+									"description": "Optional consumer ID for usage tracking",
+									"disabled": true
 								}
 							]
 						},
@@ -306,7 +404,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"dmn_file\": \"data/input/sample_rules.dmn\",\n  \"data\": {\n    \"season\": \"Fall\",\n    \"guests\": 6\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-dmn-dry-run-001\"\n}"
+							"raw": "{\n  \"dmn_file\": \"data/input/sample_rules.dmn\",\n  \"data\": {\n    \"season\": \"Fall\",\n    \"guests\": 6\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-dmn-dry-run-001\",\n  \"consumer_id\": null\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/rules/execute-dmn",
@@ -399,9 +497,248 @@
 						"description": "Execute workflow with default stages (INITIATED, NEW, INPROGESS, FINISHED)."
 					},
 					"response": []
+				},
+				{
+					"name": "Execute Workflow by Name",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"workflow_name\": \"ticket_processing\",\n  \"data\": {\n    \"ticket_id\": \"TICK-123\",\n    \"title\": \"Issue Report\",\n    \"priority\": \"high\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflow/execute-by-name",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflow",
+								"execute-by-name"
+							]
+						},
+						"description": "Run a stored, active workflow definition by name; stages are taken from the saved workflow."
+					},
+					"response": []
 				}
 			],
 			"description": "Workflow execution endpoints"
+		},
+		{
+			"name": "Workflow Definitions",
+			"item": [
+				{
+					"name": "Create Workflow",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"ticket_processing\",\n  \"description\": \"Ticket lifecycle\",\n  \"stages\": [\"NEW\", \"INPROGESS\", \"FINISHED\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflows",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflows"
+							]
+						},
+						"description": "Create a workflow definition (201). Stages must be a non-empty ordered list."
+					},
+					"response": []
+				},
+				{
+					"name": "List Workflows",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflows?is_active=true&offset=0&limit=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflows"
+							],
+							"query": [
+								{
+									"key": "is_active",
+									"value": "true",
+									"description": "Filter by active flag (optional)"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						},
+						"description": "List workflow definitions with optional filters and pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Workflow by Name",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflows/{{workflow_name}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflows",
+								"{{workflow_name}}"
+							]
+						},
+						"description": "Get a single workflow definition by name."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Workflow",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"description\": \"Updated ticket workflow\",\n  \"stages\": [\"NEW\", \"INPROGESS\", \"FINISHED\"],\n  \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflows/{{workflow_name}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflows",
+								"{{workflow_name}}"
+							]
+						},
+						"description": "Update description, stages, and/or is_active."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Workflow (Deactivate)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflows/{{workflow_name}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflows",
+								"{{workflow_name}}"
+							]
+						},
+						"description": "Soft delete (deactivate) by default. Use query hard=true if supported for hard delete."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Workflow (Hard)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/workflows/{{workflow_name}}?hard=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"workflows",
+								"{{workflow_name}}"
+							],
+							"query": [
+								{
+									"key": "hard",
+									"value": "true",
+									"description": "Optional hard delete when implementation supports it"
+								}
+							]
+						},
+						"description": "DELETE with hard=true when the service supports hard deletion."
+					},
+					"response": []
+				}
+			],
+			"description": "CRUD for stored workflow definitions under /api/v1/workflows"
 		},
 		{
 			"name": "DMN Upload",
@@ -928,6 +1265,166 @@
 			"description": "CRUD operations for Actions/Patterns management"
 		},
 		{
+			"name": "Attributes Management",
+			"item": [
+				{
+					"name": "List All Attributes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/attributes",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"attributes"
+							]
+						},
+						"description": "List attributes (facts) used in conditions and input data."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Attribute by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/attributes/{{attribute_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"attributes",
+								"{{attribute_id}}"
+							]
+						},
+						"description": "Get one attribute by attribute_id."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Attribute",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"attribute_id\": \"comic_issue\",\n  \"name\": \"Comic issue number\",\n  \"data_type\": \"number\",\n  \"description\": \"Issue number for matching\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/attributes",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"attributes"
+							]
+						},
+						"description": "Create an attribute (201). data_type examples: string, number, integer, boolean, date, array, object."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Attribute",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated display name\",\n  \"data_type\": \"integer\",\n  \"description\": \"Updated description\",\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/attributes/{{attribute_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"attributes",
+								"{{attribute_id}}"
+							]
+						},
+						"description": "Partial update of an attribute."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Attribute",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/management/attributes/{{attribute_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"management",
+								"attributes",
+								"{{attribute_id}}"
+							]
+						},
+						"description": "Delete an attribute by ID (204)."
+					},
+					"response": []
+				}
+			],
+			"description": "CRUD for facts/attributes at /api/v1/management/attributes"
+		},
+		{
 			"name": "Rulesets Management",
 			"item": [
 				{
@@ -1102,7 +1599,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id?limit=10",
+							"raw": "{{base_url}}/api/v1/rules/versions/{{rule_id}}?limit=10",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1111,7 +1608,7 @@
 								"v1",
 								"rules",
 								"versions",
-								":rule_id"
+								"{{rule_id}}"
 							],
 							"query": [
 								{
@@ -1143,7 +1640,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id/current",
+							"raw": "{{base_url}}/api/v1/rules/versions/{{rule_id}}/current",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1152,7 +1649,7 @@
 								"v1",
 								"rules",
 								"versions",
-								":rule_id",
+								"{{rule_id}}",
 								"current"
 							],
 							"variable": [
@@ -1178,7 +1675,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id/1",
+							"raw": "{{base_url}}/api/v1/rules/versions/{{rule_id}}/1",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1187,7 +1684,7 @@
 								"v1",
 								"rules",
 								"versions",
-								":rule_id",
+								"{{rule_id}}",
 								"1"
 							],
 							"variable": [
@@ -1221,7 +1718,7 @@
 							"raw": "{\n  \"version_a\": 1,\n  \"version_b\": 2\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id/compare",
+							"raw": "{{base_url}}/api/v1/rules/versions/{{rule_id}}/compare",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1230,7 +1727,7 @@
 								"v1",
 								"rules",
 								"versions",
-								":rule_id",
+								"{{rule_id}}",
 								"compare"
 							],
 							"variable": [
@@ -1264,7 +1761,7 @@
 							"raw": "{\n  \"version_number\": 1,\n  \"change_reason\": \"Rollback due to production issue\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/versions/:rule_id/rollback",
+							"raw": "{{base_url}}/api/v1/rules/versions/{{rule_id}}/rollback",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1273,7 +1770,7 @@
 								"v1",
 								"rules",
 								"versions",
-								":rule_id",
+								"{{rule_id}}",
 								"rollback"
 							],
 							"variable": [
@@ -1289,6 +1786,471 @@
 				}
 			],
 			"description": "Rule version history, compare, and rollback endpoints"
+		},
+		{
+			"name": "Hot Reload",
+			"item": [
+				{
+					"name": "Get Hot Reload Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/status?include_registry=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"status"
+							],
+							"query": [
+								{
+									"key": "include_registry",
+									"value": "true",
+									"description": "Include registry details in response"
+								}
+							]
+						},
+						"description": "Current hot reload service status. Real-time updates also available via WebSocket: ws://HOST:PORT/ws/hot-reload"
+					},
+					"response": []
+				},
+				{
+					"name": "Reload Rules",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ruleset_id\": null,\n  \"rule_id\": null,\n  \"force\": false,\n  \"validate\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/reload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"reload"
+							]
+						},
+						"description": "Reload rules from database into memory. Field validate aliases validate_before_reload."
+					},
+					"response": []
+				},
+				{
+					"name": "Reload Single Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/reload/rule/{{rule_id}}?validate=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"reload",
+								"rule",
+								"{{rule_id}}"
+							],
+							"query": [
+								{
+									"key": "validate",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Reload one rule by ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Reload Ruleset",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/reload/ruleset/{{ruleset_numeric_id}}?validate=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"reload",
+								"ruleset",
+								"{{ruleset_numeric_id}}"
+							],
+							"query": [
+								{
+									"key": "validate",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Reload all rules in a ruleset (numeric ruleset ID)."
+					},
+					"response": []
+				},
+				{
+					"name": "Validate Current Rules",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/validate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"validate"
+							]
+						},
+						"description": "Validate rules currently held in memory."
+					},
+					"response": []
+				},
+				{
+					"name": "Validate From Source",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"source\": null\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/validate-from-source",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"validate-from-source"
+							]
+						},
+						"description": "Load from config repository (e.g. DB when USE_DATABASE=true) and validate. Optional source: ruleset name or file path."
+					},
+					"response": []
+				},
+				{
+					"name": "Start Monitoring",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enabled\": true,\n  \"interval_seconds\": 30\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/monitoring/start",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"monitoring",
+								"start"
+							]
+						},
+						"description": "Start automatic hot reload monitoring (interval 5–3600 seconds)."
+					},
+					"response": []
+				},
+				{
+					"name": "Stop Monitoring",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/monitoring/stop",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"monitoring",
+								"stop"
+							]
+						},
+						"description": "Stop hot reload monitoring thread."
+					},
+					"response": []
+				},
+				{
+					"name": "Reload History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/hot-reload/history?limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"hot-reload",
+								"history"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Recent reload history entries."
+					},
+					"response": []
+				}
+			],
+			"description": "Hot reload HTTP API under /api/v1/rules/hot-reload. WebSocket: /ws/hot-reload"
+		},
+		{
+			"name": "Consumers",
+			"item": [
+				{
+					"name": "List Consumers",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/consumers?status=active",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"consumers"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "active",
+									"description": "Optional: active or inactive"
+								}
+							]
+						},
+						"description": "List consumers. Path is /consumers (no /api/v1 prefix)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Consumer",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/consumers/{{consumer_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"consumers",
+								"{{consumer_id}}"
+							]
+						},
+						"description": "Get one consumer by consumer_id string."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Consumer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"consumer_id\": \"client_1\",\n  \"name\": \"Test Client\",\n  \"description\": \"For testing\",\n  \"status\": \"active\",\n  \"tags\": [\"test\"],\n  \"metadata\": {\"env\": \"staging\"}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/consumers",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"consumers"
+							]
+						},
+						"description": "Create consumer (201)."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Consumer",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Client Name\",\n  \"description\": \"Updated description\",\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/consumers/{{consumer_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"consumers",
+								"{{consumer_id}}"
+							]
+						},
+						"description": "Update consumer fields (partial)."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Consumer",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/consumers/{{consumer_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"consumers",
+								"{{consumer_id}}"
+							]
+						},
+						"description": "Delete consumer (204)."
+					},
+					"response": []
+				}
+			],
+			"description": "Consumer registry at /consumers (matches FastAPI router prefix)"
 		},
 		{
 			"name": "A/B Testing",
@@ -1313,7 +2275,7 @@
 							"raw": "{\n  \"test_id\": \"test-001\",\n  \"test_name\": \"Rule variant comparison\",\n  \"rule_id\": \"R0001\",\n  \"ruleset_id\": 1,\n  \"variant_a_version\": \"v1\",\n  \"variant_b_version\": \"v2\",\n  \"description\": \"Compare v1 vs v2 for conversion\",\n  \"traffic_split_a\": 0.5,\n  \"traffic_split_b\": 0.5,\n  \"variant_a_description\": \"Control (current)\",\n  \"variant_b_description\": \"Treatment (new)\",\n  \"duration_hours\": 168,\n  \"min_sample_size\": 100,\n  \"confidence_level\": 0.95\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/ab-tests",
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1321,10 +2283,11 @@
 								"api",
 								"v1",
 								"rules",
-								"ab-tests"
+								"ab-tests",
+								""
 							]
 						},
-						"description": "Create a new A/B test to compare two rule versions."
+						"description": "Create a new A/B test to compare two rule versions (POST /api/v1/rules/ab-tests/)."
 					},
 					"response": []
 				},
@@ -1340,7 +2303,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/ab-tests?rule_id=R0001&status=running&limit=20",
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/?rule_id=R0001&status=running&limit=20",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1348,7 +2311,8 @@
 								"api",
 								"v1",
 								"rules",
-								"ab-tests"
+								"ab-tests",
+								""
 							],
 							"query": [
 								{
@@ -1384,7 +2348,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id",
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/{{test_id}}",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1393,7 +2357,7 @@
 								"v1",
 								"rules",
 								"ab-tests",
-								":test_id"
+								"{{test_id}}"
 							],
 							"variable": [
 								{
@@ -1426,7 +2390,7 @@
 							"raw": "{\n  \"started_by\": \"admin\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id/start",
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/{{test_id}}/start",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1435,7 +2399,7 @@
 								"v1",
 								"rules",
 								"ab-tests",
-								":test_id",
+								"{{test_id}}",
 								"start"
 							],
 							"variable": [
@@ -1469,7 +2433,7 @@
 							"raw": "{\n  \"winning_variant\": \"B\",\n  \"stopped_by\": \"admin\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id/stop",
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/{{test_id}}/stop",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1478,7 +2442,7 @@
 								"v1",
 								"rules",
 								"ab-tests",
-								":test_id",
+								"{{test_id}}",
 								"stop"
 							],
 							"variable": [
@@ -1504,7 +2468,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id/metrics",
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/{{test_id}}/metrics",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1513,7 +2477,7 @@
 								"v1",
 								"rules",
 								"ab-tests",
-								":test_id",
+								"{{test_id}}",
 								"metrics"
 							],
 							"variable": [
@@ -1547,7 +2511,7 @@
 							"raw": "{\n  \"assignment_key\": \"user-12345\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id/assign",
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/{{test_id}}/assign",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1556,7 +2520,7 @@
 								"v1",
 								"rules",
 								"ab-tests",
-								":test_id",
+								"{{test_id}}",
 								"assign"
 							],
 							"variable": [
@@ -1582,7 +2546,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/rules/ab-tests/:test_id",
+							"raw": "{{base_url}}/api/v1/rules/ab-tests/{{test_id}}",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1591,7 +2555,7 @@
 								"v1",
 								"rules",
 								"ab-tests",
-								":test_id"
+								"{{test_id}}"
 							],
 							"variable": [
 								{
@@ -1639,6 +2603,36 @@
 			"value": "your-api-key-here",
 			"type": "string",
 			"disabled": true
+		},
+		{
+			"key": "rule_id",
+			"value": "R0001",
+			"type": "string"
+		},
+		{
+			"key": "test_id",
+			"value": "test-001",
+			"type": "string"
+		},
+		{
+			"key": "workflow_name",
+			"value": "ticket_processing",
+			"type": "string"
+		},
+		{
+			"key": "attribute_id",
+			"value": "issue",
+			"type": "string"
+		},
+		{
+			"key": "consumer_id",
+			"value": "client_1",
+			"type": "string"
+		},
+		{
+			"key": "ruleset_numeric_id",
+			"value": "1",
+			"type": "string"
 		}
 	]
 }

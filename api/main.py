@@ -17,7 +17,10 @@ from api.middleware.logging import LoggingMiddleware
 from api.middleware.path_normalizer import PathNormalizerMiddleware
 from api.routers import register_routers, register_websocket_routes
 from common.config import get_config
+from common.config_loader import get_config_loader
 from common.logger import get_logger
+from common.repository.config_repository import get_config_repository
+from common.repository.db_repository import DatabaseConfigRepository
 
 logger = get_logger(__name__)
 config = get_config()
@@ -29,6 +32,19 @@ async def lifespan(app: FastAPI):
     logger.info("Rule Engine API starting up", environment=config.environment)
     logger.info("API documentation available at /docs")
     logger.info("Health check available at /health")
+    if isinstance(get_config_repository(), DatabaseConfigRepository):
+        try:
+            rules_count = len(get_config_loader().load_rules_set())
+            logger.info(
+                "Preloaded rules from database at startup",
+                rules_count=rules_count,
+            )
+        except Exception as e:
+            logger.warning(
+                "Could not preload rules from database at startup",
+                error=str(e),
+                exc_info=True,
+            )
     yield
     logger.info("Rule Engine API shutting down")
 

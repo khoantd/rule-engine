@@ -2,16 +2,23 @@ from common.json_util import read_json_file, parse_json_v2
 from common.rule_engine_util import (
     rules_set_cfg_read,
     rules_set_setup,
+    rules_set_exec,
+    conditions_set_load,
     actions_set_cfg_read,
     find_action_recommendation,
     sort_by_priority,
     rule_run,
     condition_setup,
-    _evaluate_feel_expression
+    _evaluate_feel_expression,
 )
 from common.dmn_parser import DMNParser
 from common.logger import get_logger
-from common.exceptions import DataValidationError, RuleEvaluationError, ConfigurationError
+from common.exceptions import (
+    ConfigurationError,
+    DataValidationError,
+    RuleCompilationError,
+    RuleEvaluationError,
+)
 from common.execution_history import get_execution_history
 from common.metrics import get_metrics
 from services.usage_tracking import get_usage_tracking_service
@@ -63,7 +70,8 @@ def rules_exec(
     data: Any,
     dry_run: bool = False,
     correlation_id: Optional[str] = None,
-    consumer_id: Optional[str] = None
+    consumer_id: Optional[str] = None,
+    rules: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Execute rules against input data.
@@ -72,7 +80,14 @@ def rules_exec(
         data: Dictionary containing input data for rule evaluation
         dry_run: If True, execute rules without side effects (preview mode)
         correlation_id: Optional correlation ID for request tracing
-        
+        consumer_id: Optional consumer ID for usage tracking
+        rules: Optional list of rule definitions (same shape as config ``rules_set``
+            entries: ``rulename`` / ``rule_name``, ``type`` ``simple`` or ``complex``,
+            ``conditions``, ``rulepoint``, etc.). When provided (non-``None``), these
+            rules are prepared with the configured conditions catalog and executed
+            instead of file-based rules. An empty list runs no rules. When ``None``,
+            behavior is unchanged (load rules from configuration).
+
     Returns:
         Dictionary containing:
             - total_points: Sum of rule points (weighted)
@@ -117,11 +132,26 @@ def rules_exec(
             matched_rule_ids: List[str] = []
             total_points = 0.0
             
-            # Load rules configuration
-            logger.debug("Loading rules configuration")
+            # Load rules configuration (request-scoped list or file-backed setup)
+            logger.debug("Loading rules configuration", request_rules=rules is not None)
             try:
-                rules_list = rules_set_setup(rules_set_cfg_read())
+                if rules is not None:
+                    conditionss_set = conditions_set_load()
+                    try:
+                        rules_list = rules_set_exec(rules, conditionss_set)
+                        rules_list = sorted(rules_list, key=sort_by_priority)
+                    except (RuleCompilationError, ConfigurationError) as prepare_err:
+                        raise DataValidationError(
+                            str(prepare_err),
+                            error_code=getattr(prepare_err, "error_code", None)
+                            or "RULE_COMPILATION_ERROR",
+                            context=getattr(prepare_err, "context", None) or {},
+                        ) from prepare_err
+                else:
+                    rules_list = rules_set_setup(rules_set_cfg_read())
             except ConfigurationError:
+                raise
+            except DataValidationError:
                 raise
             except Exception as e:
                 logger.error("Failed to load rules configuration", error=str(e), exc_info=True)
@@ -372,12 +402,266 @@ def rules_exec(
             )
 
 
+def rules_exec_by_ruleset(
+    ruleset_name: str,
+    data: Any,
+    dry_run: bool = False,
+    correlation_id: Optional[str] = None,
+    consumer_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Execute rules for a specific ruleset against input data.
+
+    Args:
+        ruleset_name: Name of the ruleset to execute
+        data: Dictionary containing input data for rule evaluation
+        dry_run: If True, execute rules without side effects (preview mode)
+        correlation_id: Optional correlation ID for request tracing
+        consumer_id: Optional consumer ID for usage tracking
+
+    Returns:
+        Same structure as ``rules_exec``:
+            - total_points, pattern_result, action_recommendation
+            - rule_evaluations / would_match / would_not_match (dry_run only)
+            - ruleset_name: Name of the ruleset that was executed
+
+    Raises:
+        DataValidationError: If input data is invalid
+        ConfigurationError: If the ruleset cannot be loaded
+        RuleEvaluationError: If rule evaluation fails
+    """
+    from common.repository.config_repository import get_config_repository
+    from common.exceptions import NotFoundError
+
+    start_time = time.time()
+    execution_id = str(uuid.uuid4())
+    correlation_id = correlation_id or str(uuid.uuid4())
+
+    metrics = get_metrics()
+    history = get_execution_history()
+
+    logger.info(
+        "Starting ruleset-specific rules execution",
+        execution_id=execution_id,
+        correlation_id=correlation_id,
+        ruleset_name=ruleset_name,
+        dry_run=dry_run,
+        input_data_keys=list(data.keys()) if isinstance(data, dict) else [],
+    )
+
+    error = None
+    error_code = None
+
+    try:
+        with metrics.timer('rule_execution', dimensions={'dry_run': str(dry_run), 'ruleset': ruleset_name}):
+            validated_data = validate_input_data(data)
+
+            results = []
+            rule_evaluations: List[Dict[str, Any]] = []
+            executed_rules_count = 0
+            matched_rules_count = 0
+            matched_rule_ids: List[str] = []
+            total_points = 0.0
+
+            # Load rules for the specific ruleset directly from the repository
+            logger.debug("Loading rules for ruleset", ruleset_name=ruleset_name)
+            try:
+                repository = get_config_repository()
+                raw_rules = repository.read_rules_set(ruleset_name)
+            except ConfigurationError:
+                raise
+            except Exception as e:
+                logger.error("Failed to load rules for ruleset", ruleset_name=ruleset_name, error=str(e), exc_info=True)
+                raise ConfigurationError(
+                    f"Failed to load rules for ruleset '{ruleset_name}': {str(e)}",
+                    error_code="RULES_LOAD_ERROR",
+                    context={"ruleset_name": ruleset_name, "error": str(e)},
+                ) from e
+
+            if not raw_rules:
+                logger.warning("No rules found for ruleset", ruleset_name=ruleset_name)
+                result = {
+                    "total_points": 0.0,
+                    "pattern_result": "",
+                    "action_recommendation": None,
+                    "ruleset_name": ruleset_name,
+                }
+                if dry_run:
+                    result.update({"rule_evaluations": [], "would_match": [], "would_not_match": []})
+                return result
+
+            rules_list = rules_set_setup(raw_rules)
+            logger.info("Loaded rules for ruleset", ruleset_name=ruleset_name, rules_count=len(rules_list))
+            metrics.increment('rules_loaded', value=len(rules_list))
+
+            for rule in rules_list:
+                try:
+                    rule_id = rule.get('rule_name', 'unknown')
+                    if not isinstance(rule, dict):
+                        raise RuleEvaluationError(
+                            f"Invalid rule structure: expected dict, got {type(rule).__name__}",
+                            error_code="RULE_INVALID_STRUCTURE",
+                            context={'rule': rule},
+                        )
+
+                    rule_start_time = time.time()
+                    result = rule_run(rule, validated_data)
+                    executed_rules_count += 1
+                    rule_execution_time = (time.time() - rule_start_time) * 1000
+
+                    if not isinstance(result, dict):
+                        raise RuleEvaluationError(
+                            f"Rule {rule_id} returned invalid result type: {type(result).__name__}",
+                            error_code="RULE_RESULT_INVALID",
+                            context={'rule_id': rule_id, 'result': result},
+                        )
+
+                    rule_matched = result.get("action_result", "-") != "-"
+                    if rule_matched:
+                        matched_rules_count += 1
+                        matched_rule_ids.append(rule_id)
+                        metrics.increment('rules_matched', dimensions={'rule_name': rule_id})
+                    else:
+                        metrics.increment('rules_not_matched', dimensions={'rule_name': rule_id})
+
+                    metrics.put_metric('rule_evaluation_time', rule_execution_time, 'Milliseconds', dimensions={'rule_name': rule_id})
+                    metrics.track_rule_execution(rule_name=rule_id, matched=rule_matched, execution_time_ms=rule_execution_time)
+
+                    try:
+                        rule_point = float(result.get("rule_point", 0))
+                        weight = float(result.get("weight", 0))
+                        total_points += rule_point * weight
+                    except (ValueError, TypeError) as conversion_error:
+                        logger.warning("Invalid rule_point or weight", rule_id=rule_id, error=str(conversion_error))
+                        total_points += 0.0
+
+                    action_result = result.get("action_result", "-")
+                    results.append(action_result)
+
+                    if dry_run:
+                        rule_evaluations.append({
+                            'rule_name': rule_id,
+                            'rule_priority': rule.get('priority'),
+                            'condition': rule.get('condition', ''),
+                            'matched': rule_matched,
+                            'action_result': action_result,
+                            'rule_point': result.get("rule_point", 0.0),
+                            'weight': result.get("weight", 0.0),
+                            'execution_time_ms': rule_execution_time,
+                        })
+
+                except RuleEvaluationError:
+                    raise
+                except Exception as rule_error:
+                    logger.error("Error processing rule", rule_id=rule.get('rule_name', 'unknown'), error=str(rule_error), exc_info=True)
+                    continue
+
+            tmp_str = "".join(results) if results else ""
+
+            try:
+                actions_set = actions_set_cfg_read()
+                tmp_action = find_action_recommendation(actions_set, tmp_str)
+            except Exception as action_error:
+                logger.warning("Error getting action recommendation", error=str(action_error))
+                tmp_action = None
+
+            result = {
+                "total_points": total_points,
+                "pattern_result": tmp_str,
+                "action_recommendation": tmp_action,
+                "ruleset_name": ruleset_name,
+            }
+
+            if dry_run:
+                would_match = [e for e in rule_evaluations if e['matched']]
+                would_not_match = [e for e in rule_evaluations if not e['matched']]
+                result.update({
+                    "rule_evaluations": rule_evaluations,
+                    "would_match": would_match,
+                    "would_not_match": would_not_match,
+                    "dry_run": True,
+                })
+
+            execution_time_ms = (time.time() - start_time) * 1000
+
+            metrics.increment('executions_total', dimensions={'dry_run': str(dry_run)})
+            metrics.put_metric('execution_time', execution_time_ms, 'Milliseconds')
+            metrics.put_metric('total_points', total_points, 'Count')
+            metrics.increment('rules_evaluated', value=executed_rules_count)
+            metrics.track_action(tmp_action)
+            metrics.track_pattern(tmp_str)
+            metrics.track_points(total_points)
+
+            logger.info(
+                "Ruleset-specific rules execution completed",
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+                ruleset_name=ruleset_name,
+                total_points=total_points,
+                pattern_result=tmp_str,
+                action_recommendation=tmp_action,
+                executed_rules=executed_rules_count,
+                matched_rules=matched_rules_count,
+                execution_time_ms=execution_time_ms,
+                dry_run=dry_run,
+            )
+
+            history.log_execution(
+                input_data=validated_data,
+                output_data=result,
+                execution_time_ms=execution_time_ms,
+                correlation_id=correlation_id,
+                rules_evaluated=executed_rules_count,
+                rules_matched=matched_rules_count,
+                rule_evaluations=rule_evaluations if dry_run else None,
+            )
+
+            if consumer_id and matched_rule_ids:
+                try:
+                    tracking_service = get_usage_tracking_service()
+                    tracking_service.track_usage(
+                        consumer_id=consumer_id,
+                        rule_ids=matched_rule_ids,
+                        ruleset_id=None,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to track consumer usage", error=str(e), consumer_id=consumer_id)
+
+            return result
+
+    except (DataValidationError, ConfigurationError, RuleEvaluationError):
+        raise
+    except Exception as execution_error:
+        error = str(execution_error)
+        error_code = "RULES_EXEC_ERROR"
+        logger.error("Unexpected error in ruleset execution", ruleset_name=ruleset_name, error=error, exc_info=True)
+        raise RuleEvaluationError(
+            f"Unexpected error in ruleset execution: {error}",
+            error_code=error_code,
+            context={"error": error, "ruleset_name": ruleset_name},
+        ) from execution_error
+    finally:
+        if error:
+            execution_time_ms = (time.time() - start_time) * 1000
+            history.log_execution(
+                input_data=data if isinstance(data, dict) else {},
+                output_data={},
+                execution_time_ms=execution_time_ms,
+                correlation_id=correlation_id,
+                rules_evaluated=0,
+                rules_matched=0,
+                error=error,
+                error_code=error_code,
+            )
+
+
 def rules_exec_batch(
     data_list: List[Dict[str, Any]],
     dry_run: bool = False,
     max_workers: Optional[int] = None,
     correlation_id: Optional[str] = None,
-    consumer_id: Optional[str] = None
+    consumer_id: Optional[str] = None,
+    rules: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Execute rules against multiple data items efficiently.
@@ -387,7 +671,9 @@ def rules_exec_batch(
         dry_run: If True, execute rules without side effects
         max_workers: Maximum number of parallel workers (None = auto)
         correlation_id: Optional correlation ID for batch tracking
-        
+        consumer_id: Optional consumer ID for usage tracking
+        rules: Same optional rule override as :func:`rules_exec`.
+
     Returns:
         Dictionary containing:
             - results: List of execution results
@@ -422,7 +708,8 @@ def rules_exec_batch(
                 data=data_item,
                 dry_run=dry_run,
                 correlation_id=item_correlation_id,
-                consumer_id=consumer_id
+                consumer_id=consumer_id,
+                rules=rules,
             )
             result['item_index'] = index
             result['correlation_id'] = item_correlation_id
@@ -932,7 +1219,11 @@ def dmn_rules_exec(
             
             # Group rules by decision_id
             rules_by_decision = _group_rules_by_decision(rules_set, decisions_metadata)
-            
+            # Shared across dependency-ordered and flat execution paths (must be defined before
+            # either branch: the else branch assigns locally, which makes this name local to the
+            # whole block; extend() in the if branch would otherwise run before assignment).
+            matched_rule_ids: List[str] = []
+
             # Execute decisions in dependency order
             # If no execution order provided, execute all rules together (backward compatibility)
             if execution_order and decisions_metadata:
@@ -1071,7 +1362,6 @@ def dmn_rules_exec(
                 
                 # Convert DMN rules to execution format
                 prepared_rules = []
-                matched_rule_ids: List[str] = []
                 for dmn_rule in rules_set:
                     try:
                         combined_condition = dmn_rule.get('combined_condition')

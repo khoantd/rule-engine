@@ -5,7 +5,7 @@ This module provides services for managing Rules, including CRUD operations
 using database storage.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from common.logger import get_logger
 from common.exceptions import (
@@ -18,6 +18,132 @@ from common.db_connection import get_db_session
 from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
+
+
+def _normalize_complex_mode(mode: Any) -> str:
+    """
+    Normalize API/file ``conditions.mode`` to engine values ``inclusive`` or ``exclusive``.
+
+    Accepts inclusive/and and exclusive/or (case-insensitive).
+    """
+    if mode is None or (isinstance(mode, str) and not mode.strip()):
+        raise DataValidationError(
+            "Complex rules require conditions.mode (inclusive/and or exclusive/or).",
+            error_code="RULE_COMPLEX_MODE_MISSING",
+            context={"mode": mode},
+        )
+    m = str(mode).strip().lower()
+    if m in ("inclusive", "and"):
+        return "inclusive"
+    if m in ("exclusive", "or"):
+        return "exclusive"
+    raise DataValidationError(
+        f"Invalid conditions.mode {mode!r}; use inclusive/and or exclusive/or.",
+        error_code="RULE_INVALID_COMPLEX_MODE",
+        context={"mode": mode},
+    )
+
+
+def _resolve_rule_conditions_for_db(
+    session: Session,
+    conditions: Dict[str, Any],
+    declared_type: Optional[str],
+    base_metadata: Dict[str, Any],
+) -> Tuple[str, str, str, Dict[str, Any]]:
+    """
+    Resolve API ``conditions`` into DB columns and optional ``metadata.rule_engine``.
+
+    Supports:
+    - Complex: ``items`` (non-empty list of condition IDs) and ``mode``.
+    - Simple by reference: ``item``, ``condition_id``, or ``\"0\"`` (condition ID).
+    - Inline: ``attribute`` + ``equation``/``condition`` + ``constant``.
+
+    Returns:
+        Tuple of (attribute, operator, constant, merged_metadata).
+    """
+    merged: Dict[str, Any] = dict(base_metadata)
+    if isinstance(conditions, dict) and len(conditions) == 0:
+        merged.pop("rule_engine", None)
+        merged.pop("condition_ids", None)
+        return "", "equal", "", merged
+
+    raw_items = conditions.get("items") if isinstance(conditions, dict) else None
+
+    if isinstance(raw_items, list) and len(raw_items) > 0:
+        mode = _normalize_complex_mode(conditions.get("mode"))
+        ids: List[str] = []
+        for raw in raw_items:
+            if raw is None or not str(raw).strip():
+                raise DataValidationError(
+                    "conditions.items must contain non-empty condition ID strings.",
+                    error_code="RULE_COMPLEX_ITEM_EMPTY",
+                    context={"items": raw_items},
+                )
+            ids.append(str(raw).strip())
+        resolved = []
+        for cid in ids:
+            cond_model = session.query(Condition).filter(Condition.condition_id == cid).first()
+            if not cond_model:
+                raise DataValidationError(
+                    f"Condition '{cid}' not found.",
+                    error_code="CONDITION_NOT_FOUND",
+                    context={"condition_id": cid},
+                )
+            resolved.append(cond_model)
+        first = resolved[0]
+        merged["rule_engine"] = {
+            "type": "complex",
+            "conditions": {"items": ids, "mode": mode},
+        }
+        merged.pop("condition_ids", None)
+        return first.attribute, first.operator, str(first.value), merged
+
+    if declared_type == "complex":
+        raise DataValidationError(
+            "type 'complex' requires conditions.items as a non-empty list of condition IDs.",
+            error_code="RULE_COMPLEX_ITEMS_INVALID",
+            context={"conditions": conditions},
+        )
+
+    condition_id: Optional[str] = None
+    if "item" in conditions:
+        condition_id = conditions.get("item")
+    elif "condition_id" in conditions:
+        condition_id = conditions.get("condition_id")
+    elif "0" in conditions:
+        condition_id = conditions.get("0")
+
+    if condition_id is not None:
+        cid = str(condition_id).strip()
+        if not cid:
+            raise DataValidationError(
+                "Condition reference cannot be empty.",
+                error_code="RULE_CONDITION_ID_EMPTY",
+                context={"conditions": conditions},
+            )
+        cond_model = session.query(Condition).filter(Condition.condition_id == cid).first()
+        if not cond_model:
+            raise DataValidationError(
+                f"Condition '{cid}' not found.",
+                error_code="CONDITION_NOT_FOUND",
+                context={"condition_id": cid},
+            )
+        merged["rule_engine"] = {"type": "simple", "conditions": {"item": cid}}
+        merged["condition_ids"] = {"condition_id": cid}
+        return cond_model.attribute, cond_model.operator, str(cond_model.value), merged
+
+    if "attribute" in conditions:
+        merged.pop("rule_engine", None)
+        merged.pop("condition_ids", None)
+        attribute = str(conditions.get("attribute", "") or "")
+        condition_op = str(
+            conditions.get("equation", conditions.get("condition", "equal")) or "equal"
+        )
+        cval = conditions.get("constant")
+        constant = "" if cval is None else str(cval)
+        return attribute, condition_op, constant, merged
+
+    return "", "equal", "", merged
 
 
 class RuleManagementService:
@@ -119,9 +245,7 @@ class RuleManagementService:
             DataValidationError: If rule_id is empty
         """
         if not rule_id or not rule_id.strip():
-            raise DataValidationError(
-                "Rule ID cannot be empty", error_code="RULE_ID_EMPTY"
-            )
+            raise DataValidationError("Rule ID cannot be empty", error_code="RULE_ID_EMPTY")
 
         logger.debug("Getting rule", rule_id=rule_id)
         try:
@@ -134,9 +258,7 @@ class RuleManagementService:
             logger.info("Rule found", rule_id=rule_id)
             return self._rule_to_dict(rule)
         except Exception as e:
-            logger.error(
-                "Failed to get rule", rule_id=rule_id, error=str(e), exc_info=True
-            )
+            logger.error("Failed to get rule", rule_id=rule_id, error=str(e), exc_info=True)
             raise ConfigurationError(
                 f"Failed to get rule {rule_id}: {str(e)}",
                 error_code="RULE_GET_ERROR",
@@ -151,10 +273,12 @@ class RuleManagementService:
             rule_data: Rule data dictionary. Must include:
                 - id: Unique rule identifier
                 - rule_name: Rule name
-                - conditions: Conditions dictionary or inline condition (attribute, equation, constant)
+                - conditions: One of: ``{"item": "C..."}`` / ``{"condition_id": ...}``,
+                  ``{"items": [...], "mode": "inclusive"|"and"|"exclusive"|"or"}`` for complex,
+                  or inline ``{"attribute", "equation", "constant"}``
                 - description: Rule description
                 - result: Result string
-                - Optional: rule_point, weight, priority, type, action_result
+                - Optional: rule_point, weight, priority, type, action_result, metadata
 
         Returns:
             Created rule dictionary
@@ -177,9 +301,7 @@ class RuleManagementService:
 
         rule_id = rule_data["id"]
         if not rule_id or not rule_id.strip():
-            raise DataValidationError(
-                "Rule ID cannot be empty", error_code="RULE_ID_EMPTY"
-            )
+            raise DataValidationError("Rule ID cannot be empty", error_code="RULE_ID_EMPTY")
 
         try:
             # If rule already exists, update it (upsert semantics)
@@ -193,45 +315,21 @@ class RuleManagementService:
             if ruleset_id is None:
                 ruleset_id = self._get_default_ruleset_id()
 
-            # Handle conditions - could be inline or reference
             conditions = rule_data.get("conditions", {})
-            extra_metadata = rule_data.get("metadata") or {}
+            if not isinstance(conditions, dict):
+                raise DataValidationError(
+                    "conditions must be a dictionary",
+                    error_code="RULE_CONDITIONS_INVALID",
+                    context={"conditions": conditions},
+                )
 
-            attribute = ""
-            condition_op = "equal"
-            constant = ""
-
-            if isinstance(conditions, dict):
-                # Check if it's a condition ID mapping (e.g., {"0": "COND1"})
-                # We prioritize condition ID reference if found
-                condition_id = None
-                if "0" in conditions:
-                    condition_id = conditions["0"]
-                elif "condition_id" in conditions:
-                    condition_id = conditions["condition_id"]
-
-                if condition_id:
-                    # Resolve condition
-                    with get_db_session() as session:
-                        cond_model = session.query(Condition).filter(Condition.condition_id == condition_id).first()
-                        if cond_model:
-                            attribute = cond_model.attribute
-                            condition_op = cond_model.operator
-                            constant = cond_model.value
-                            # Store the reference in extra_metadata
-                            if "condition_ids" not in extra_metadata:
-                                extra_metadata["condition_ids"] = conditions
-                        else:
-                            logger.warning("Condition ID reference not found", condition_id=condition_id)
-                            # Fallback or error? For now fallback to empty or ignore
-                
-                # If not resolved by ID and it's inline
-                if not attribute and "attribute" in conditions:
-                    attribute = conditions.get("attribute", "")
-                    condition_op = conditions.get(
-                        "equation", conditions.get("condition", "equal")
-                    )
-                    constant = conditions.get("constant", "")
+            with get_db_session() as session:
+                attribute, condition_op, constant, extra_metadata = _resolve_rule_conditions_for_db(
+                    session,
+                    conditions,
+                    rule_data.get("type"),
+                    dict(rule_data.get("metadata") or {}),
+                )
 
             # Create rule in database
             rule = self.rule_repository.create_rule(
@@ -245,13 +343,11 @@ class RuleManagementService:
                 weight=float(rule_data.get("weight", 1.0)),
                 rule_point=int(rule_data.get("rule_point", 10)),
                 priority=int(rule_data.get("priority", 0)),
-                action_result=rule_data.get(
-                    "result", rule_data.get("action_result", "Y")
-                ),
+                action_result=rule_data.get("result", rule_data.get("action_result", "Y")),
                 status=RuleStatus.ACTIVE.value,
                 version=rule_data.get("version", "1.0"),
                 created_by=rule_data.get("created_by"),
-                metadata=extra_metadata if extra_metadata else None,
+                metadata=extra_metadata or None,
             )
 
             logger.info("Rule created successfully", rule_id=rule_id)
@@ -260,9 +356,7 @@ class RuleManagementService:
         except DataValidationError:
             raise
         except Exception as e:
-            logger.error(
-                "Failed to create rule", rule_id=rule_id, error=str(e), exc_info=True
-            )
+            logger.error("Failed to create rule", rule_id=rule_id, error=str(e), exc_info=True)
             raise ConfigurationError(
                 f"Failed to create rule: {str(e)}",
                 error_code="RULE_CREATE_ERROR",
@@ -285,9 +379,7 @@ class RuleManagementService:
             ConfigurationError: If rule cannot be updated
         """
         if not rule_id or not rule_id.strip():
-            raise DataValidationError(
-                "Rule ID cannot be empty", error_code="RULE_ID_EMPTY"
-            )
+            raise DataValidationError("Rule ID cannot be empty", error_code="RULE_ID_EMPTY")
 
         logger.debug("Updating rule", rule_id=rule_id)
 
@@ -324,37 +416,36 @@ class RuleManagementService:
                 update_kwargs["version"] = rule_data["version"]
 
             # Handle conditions
-            conditions = rule_data.get("conditions")
-            if conditions and isinstance(conditions, dict):
-                # Check for condition ID reference
-                condition_id = conditions.get("0") or conditions.get("condition_id")
-                if condition_id:
+            if "conditions" in rule_data:
+                conditions = rule_data.get("conditions")
+                if conditions is None:
+                    pass
+                elif not isinstance(conditions, dict):
+                    raise DataValidationError(
+                        "conditions must be a dictionary",
+                        error_code="RULE_CONDITIONS_INVALID",
+                        context={"conditions": conditions},
+                    )
+                else:
+                    merged_meta = dict(existing.extra_metadata or {})
+                    if isinstance(rule_data.get("metadata"), dict):
+                        merged_meta.update(rule_data["metadata"])
                     with get_db_session() as session:
-                        cond_model = session.query(Condition).filter(Condition.condition_id == condition_id).first()
-                        if cond_model:
-                            update_kwargs["attribute"] = cond_model.attribute
-                            update_kwargs["condition"] = cond_model.operator
-                            update_kwargs["constant"] = str(cond_model.value)
-                            
-                            # Update metadata with reference
-                            current_metadata = existing.extra_metadata or {}
-                            current_metadata["condition_ids"] = conditions
-                            update_kwargs["extra_metadata"] = current_metadata
-                
-                # Check for inline updates (if not explicitly a reference OR if referencing failed)
-                if "attribute" in conditions:
-                    update_kwargs["attribute"] = conditions["attribute"]
-                    # Clear reference if we are switching back to inline
-                    current_metadata = update_kwargs.get("extra_metadata", existing.extra_metadata or {})
-                    if "condition_ids" in current_metadata:
-                        del current_metadata["condition_ids"]
-                    update_kwargs["extra_metadata"] = current_metadata
-                if "equation" in conditions:
-                    update_kwargs["condition"] = conditions["equation"]
-                elif "condition" in conditions:
-                    update_kwargs["condition"] = conditions["condition"]
-                if "constant" in conditions:
-                    update_kwargs["constant"] = str(conditions["constant"])
+                        (
+                            attribute,
+                            condition_op,
+                            constant,
+                            merged_meta,
+                        ) = _resolve_rule_conditions_for_db(
+                            session,
+                            conditions,
+                            rule_data.get("type"),
+                            merged_meta,
+                        )
+                    update_kwargs["attribute"] = attribute
+                    update_kwargs["condition"] = condition_op
+                    update_kwargs["constant"] = str(constant)
+                    update_kwargs["extra_metadata"] = merged_meta
 
             # Update rule
             updated = self.rule_repository.update_rule(existing.id, **update_kwargs)
@@ -372,9 +463,7 @@ class RuleManagementService:
         except DataValidationError:
             raise
         except Exception as e:
-            logger.error(
-                "Failed to update rule", rule_id=rule_id, error=str(e), exc_info=True
-            )
+            logger.error("Failed to update rule", rule_id=rule_id, error=str(e), exc_info=True)
             raise ConfigurationError(
                 f"Failed to update rule: {str(e)}",
                 error_code="RULE_UPDATE_ERROR",
@@ -393,9 +482,7 @@ class RuleManagementService:
             ConfigurationError: If rule cannot be deleted
         """
         if not rule_id or not rule_id.strip():
-            raise DataValidationError(
-                "Rule ID cannot be empty", error_code="RULE_ID_EMPTY"
-            )
+            raise DataValidationError("Rule ID cannot be empty", error_code="RULE_ID_EMPTY")
 
         logger.debug("Deleting rule", rule_id=rule_id)
 
@@ -424,9 +511,7 @@ class RuleManagementService:
         except DataValidationError:
             raise
         except Exception as e:
-            logger.error(
-                "Failed to delete rule", rule_id=rule_id, error=str(e), exc_info=True
-            )
+            logger.error("Failed to delete rule", rule_id=rule_id, error=str(e), exc_info=True)
             raise ConfigurationError(
                 f"Failed to delete rule: {str(e)}",
                 error_code="RULE_DELETE_ERROR",
@@ -443,18 +528,22 @@ class RuleManagementService:
         Returns:
             Dictionary in rule engine format
         """
-        # Determine condition format to return
-        conditions = {
+        conditions: Dict[str, Any] = {
             "attribute": rule.attribute,
             "equation": rule.condition,
             "constant": rule.constant,
         }
-        
-        # Check if we have a stored reference mapping
-        if rule.extra_metadata and "condition_ids" in rule.extra_metadata:
-            conditions = rule.extra_metadata["condition_ids"]
+        rule_type: Optional[str] = None
 
-        return {
+        if rule.extra_metadata:
+            eng = rule.extra_metadata.get("rule_engine")
+            if isinstance(eng, dict) and isinstance(eng.get("conditions"), dict):
+                conditions = eng["conditions"]
+                rule_type = eng.get("type")
+            elif "condition_ids" in rule.extra_metadata:
+                conditions = rule.extra_metadata["condition_ids"]
+
+        out: Dict[str, Any] = {
             "id": rule.rule_id,
             "rule_name": rule.rule_name,
             "conditions": conditions,
@@ -471,6 +560,9 @@ class RuleManagementService:
             "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
             "metadata": rule.extra_metadata,
         }
+        if rule_type is not None:
+            out["type"] = rule_type
+        return out
 
 
 # Global service instance

@@ -15,6 +15,16 @@ class RuleExecutionRequest(BaseModel):
     dry_run: bool = Field(default=False, description="Execute rules without side effects")
     correlation_id: Optional[str] = Field(default=None, description="Correlation ID for tracing")
     consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
+    rules: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description=(
+            "Optional rules to run instead of the configured rules file. Same shape as "
+            "config rules: rulename/rule_name, type simple|complex, conditions, rulepoint, "
+            "weight, priority, action_result. Complex rules use conditions.items (condition "
+            "id strings and/or inline dicts with attribute, equation or condition, constant) "
+            "and conditions.mode and|or|inclusive|exclusive."
+        ),
+    )
 
     @field_validator("data")
     @classmethod
@@ -22,6 +32,16 @@ class RuleExecutionRequest(BaseModel):
         """Validate that data is a non-empty dictionary."""
         if not isinstance(v, dict):
             raise ValueError("data must be a dictionary")
+        return v
+
+    @field_validator("rules")
+    @classmethod
+    def validate_rules(cls, v: Optional[List[Any]]) -> Optional[List[Any]]:
+        """When provided, must be a list (empty list runs no rules)."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise ValueError("rules must be a list of rule objects when provided")
         return v
 
     model_config = ConfigDict(
@@ -34,6 +54,31 @@ class RuleExecutionRequest(BaseModel):
                 },
                 "dry_run": False,
                 "correlation_id": "req-12345",
+                "rules": [
+                    {
+                        "rulename": "inline-complex",
+                        "type": "complex",
+                        "priority": 1,
+                        "conditions": {
+                            "items": [
+                                {
+                                    "attribute": "issue",
+                                    "equation": "greater_than",
+                                    "constant": "30",
+                                },
+                                {
+                                    "attribute": "publisher",
+                                    "equation": "equal",
+                                    "constant": "DC",
+                                },
+                            ],
+                            "mode": "and",
+                        },
+                        "rulepoint": 10.0,
+                        "weight": 1.0,
+                        "action_result": "MATCH",
+                    }
+                ],
             }
         }
     )
@@ -103,6 +148,19 @@ class BatchRuleExecutionRequest(BaseModel):
         default=None, description="Correlation ID for batch tracking"
     )
     consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
+    rules: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="Same optional rules override as RuleExecutionRequest; applied to each item.",
+    )
+
+    @field_validator("rules")
+    @classmethod
+    def validate_batch_rules(cls, v: Optional[List[Any]]) -> Optional[List[Any]]:
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise ValueError("rules must be a list of rule objects when provided")
+        return v
 
     @field_validator("data_list")
     @classmethod
@@ -505,8 +563,22 @@ class RuleCreateRequest(BaseModel):
 
     id: str = Field(..., description="Unique rule identifier")
     rule_name: str = Field(..., description="Human-readable rule name")
-    type: str = Field(default="simple", description="Rule type: 'simple' or 'complex'")
-    conditions: Dict[str, Any] = Field(..., description="Conditions dictionary")
+    type: str = Field(
+        default="simple",
+        description=(
+            "Rule type: 'simple' or 'complex'. Complex rules require conditions.items "
+            "and conditions.mode (inclusive/and or exclusive/or)."
+        ),
+    )
+    conditions: Dict[str, Any] = Field(
+        ...,
+        description=(
+            "Condition payload: simple by reference "
+            "{'item': 'C0001'} or {'condition_id': 'C0001'}; "
+            "complex {'items': ['C1','C2'], 'mode': 'inclusive'}; "
+            "or inline {'attribute', 'equation', 'constant'}."
+        ),
+    )
     description: str = Field(..., description="Rule description")
     result: str = Field(..., description="Result string")
     weight: Optional[float] = Field(None, description="Weight multiplier")
@@ -517,14 +589,17 @@ class RuleCreateRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "id": "R0004",
-                "rule_name": "Rule 4",
-                "type": "simple",
-                "conditions": {"item": "C0004"},
-                "description": "Test rule",
+                "id": "R0005",
+                "rule_name": "Complex rule (AND)",
+                "type": "complex",
+                "conditions": {
+                    "items": ["C0001", "C0002"],
+                    "mode": "inclusive",
+                },
+                "description": "All listed conditions must match; mode may be inclusive/and or exclusive/or",
                 "result": "Y",
-                "weight": 0.1,
-                "rule_point": 20,
+                "weight": 1.0,
+                "rule_point": 30,
                 "priority": 1,
                 "action_result": "Y",
             }

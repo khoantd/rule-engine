@@ -5,7 +5,7 @@ This module provides services for managing RuleSets, including CRUD operations
 using database storage.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from common.logger import get_logger
 from common.exceptions import (
@@ -157,7 +157,7 @@ class RuleSetManagementService:
                 Optional fields:
                 - description: RuleSet description
                 - version: RuleSet version
-                - rules: List of rule dictionaries (will be created)
+                - rules: List of rule ids (str), or dicts with id/rule_id (and optional fields)
                 - actionset: List of actionset entries (pattern key strings or dicts with "pattern"/"message")
 
         Returns:
@@ -210,30 +210,12 @@ class RuleSetManagementService:
                 # Create actionset entries if provided
                 actionset = ruleset_data.get("actionset", [])
                 if actionset and isinstance(actionset, list):
-                    for actionset_item in actionset:
-                        if isinstance(actionset_item, dict):
-                            pattern_key = actionset_item.get("pattern")
-                            message = actionset_item.get("message")
-                        else:
-                            pattern_key = str(actionset_item)
-                            message = ""
-
-                        if pattern_key:
-                            pattern_obj = Pattern(
-                                pattern_key=pattern_key,
-                                action_recommendation=message
-                                or f"Action for {pattern_key}",
-                                description=f"Actionset entry {pattern_key}",
-                                ruleset_id=ruleset.id,
-                            )
-                            session.add(pattern_obj)
+                    self._add_patterns_from_list(session, ruleset.id, actionset)
 
                 # Create rules if provided
                 rules = ruleset_data.get("rules", [])
                 if rules and isinstance(rules, list):
-                    for rule_data in rules:
-                        if isinstance(rule_data, dict):
-                            self._create_rule_from_dict(session, rule_data, ruleset.id)
+                    self._add_rules_from_list(session, ruleset.id, rules)
 
                 session.flush()
 
@@ -255,15 +237,16 @@ class RuleSetManagementService:
                 context={"ruleset_name": ruleset_name, "error": str(e)},
             ) from e
 
-    def update_ruleset(
-        self, ruleset_name: str, ruleset_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def update_ruleset(self, ruleset_name: str, ruleset_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Update an existing ruleset.
 
         Args:
             ruleset_name: RuleSet name
-            ruleset_data: Updated RuleSet data dictionary
+            ruleset_data: Updated RuleSet data dictionary. If ``rules`` is present,
+                existing rules for the ruleset are replaced by the new list (may be empty).
+                If ``actionset`` is present, existing actionset (pattern) rows are replaced
+                by the new list (may be empty).
 
         Returns:
             Updated RuleSet dictionary
@@ -309,6 +292,26 @@ class RuleSetManagementService:
                     ruleset.tags = ruleset_data["tags"]
                 if "metadata" in ruleset_data:
                     ruleset.extra_metadata = ruleset_data["metadata"]
+
+                if "rules" in ruleset_data:
+                    rules = ruleset_data["rules"]
+                    if not isinstance(rules, list):
+                        raise DataValidationError(
+                            "rules must be a list when provided",
+                            error_code="RULESET_RULES_INVALID",
+                            context={"rules": rules},
+                        )
+                    self._replace_rules_for_ruleset(session, ruleset, rules)
+
+                if "actionset" in ruleset_data:
+                    actionset = ruleset_data["actionset"]
+                    if not isinstance(actionset, list):
+                        raise DataValidationError(
+                            "actionset must be a list when provided",
+                            error_code="RULESET_ACTIONSET_INVALID",
+                            context={"actionset": actionset},
+                        )
+                    self._replace_actionset_for_ruleset(session, ruleset, actionset)
 
                 session.flush()
 
@@ -387,9 +390,103 @@ class RuleSetManagementService:
                 context={"ruleset_name": ruleset_name, "error": str(e)},
             ) from e
 
-    def _create_rule_from_dict(
-        self, session, rule_data: Dict[str, Any], ruleset_id: int
-    ) -> Rule:
+    def _coerce_business_rule_id(self, rule_data: Dict[str, Any]) -> str:
+        """
+        Resolve the string business rule identifier from ``id`` or ``rule_id``.
+
+        Numbers and other non-string values are coerced with ``str()``.
+
+        Raises:
+            DataValidationError: If no usable identifier is present.
+        """
+        raw: Any = None
+        if "id" in rule_data:
+            raw = rule_data.get("id")
+        if raw is None and "rule_id" in rule_data:
+            raw = rule_data.get("rule_id")
+        if raw is None:
+            raise DataValidationError(
+                "Each rule entry must include non-null 'id' or 'rule_id'",
+                error_code="RULE_RULE_ID_MISSING",
+                context={"keys": list(rule_data.keys())},
+            )
+        rule_id_str = str(raw).strip()
+        if not rule_id_str:
+            raise DataValidationError(
+                "Rule id cannot be empty",
+                error_code="RULE_ID_EMPTY",
+                context={},
+            )
+        return rule_id_str
+
+    def _normalize_rule_list_item(
+        self, rule_data: Union[str, Dict[str, Any]], index: int
+    ) -> Dict[str, Any]:
+        """Normalize a rules list element to a dict for ``_create_rule_from_dict``."""
+        if isinstance(rule_data, str):
+            rid = rule_data.strip()
+            if not rid:
+                raise DataValidationError(
+                    "Rule list string entries must be non-empty rule ids",
+                    error_code="RULESET_RULE_STRING_EMPTY",
+                    context={"index": index},
+                )
+            return {"id": rid}
+        if isinstance(rule_data, dict):
+            return rule_data
+        raise DataValidationError(
+            "Each rule must be a string rule id or an object",
+            error_code="RULESET_RULE_ITEM_INVALID",
+            context={"index": index, "type": type(rule_data).__name__},
+        )
+
+    def _add_rules_from_list(
+        self, session, ruleset_id: int, rules: List[Union[str, Dict[str, Any]]]
+    ) -> None:
+        """Create rules from a list of string ids and/or rule dicts."""
+        for idx, item in enumerate(rules):
+            self._create_rule_from_dict(
+                session, self._normalize_rule_list_item(item, idx), ruleset_id
+            )
+
+    def _replace_rules_for_ruleset(
+        self, session, ruleset: Ruleset, rules: List[Union[str, Dict[str, Any]]]
+    ) -> None:
+        """Delete existing rules for the ruleset and recreate from the list."""
+        session.query(Rule).filter(Rule.ruleset_id == ruleset.id).delete(synchronize_session=False)
+        self._add_rules_from_list(session, ruleset.id, rules)
+
+    def _add_patterns_from_list(
+        self, session, ruleset_id: int, actionset: List[Union[str, Dict[str, Any]]]
+    ) -> None:
+        """Insert Pattern rows for a ruleset from API actionset list entries."""
+        for actionset_item in actionset:
+            if isinstance(actionset_item, dict):
+                pattern_key = actionset_item.get("pattern")
+                message = actionset_item.get("message")
+            else:
+                pattern_key = str(actionset_item)
+                message = ""
+
+            if pattern_key:
+                pattern_obj = Pattern(
+                    pattern_key=pattern_key,
+                    action_recommendation=message or f"Action for {pattern_key}",
+                    description=f"Actionset entry {pattern_key}",
+                    ruleset_id=ruleset_id,
+                )
+                session.add(pattern_obj)
+
+    def _replace_actionset_for_ruleset(
+        self, session, ruleset: Ruleset, actionset: List[Union[str, Dict[str, Any]]]
+    ) -> None:
+        """Delete existing patterns for the ruleset and recreate from the actionset list."""
+        session.query(Pattern).filter(Pattern.ruleset_id == ruleset.id).delete(
+            synchronize_session=False
+        )
+        self._add_patterns_from_list(session, ruleset.id, actionset)
+
+    def _create_rule_from_dict(self, session, rule_data: Dict[str, Any], ruleset_id: int) -> Rule:
         """
         Create a rule from dictionary data.
 
@@ -401,6 +498,7 @@ class RuleSetManagementService:
         Returns:
             Created Rule instance
         """
+        business_rule_id = self._coerce_business_rule_id(rule_data)
         conditions = rule_data.get("conditions", {})
 
         # Handle conditions - could be inline or reference
@@ -414,7 +512,7 @@ class RuleSetManagementService:
             constant = ""
 
         rule = Rule(
-            rule_id=rule_data.get("id", ""),
+            rule_id=business_rule_id,
             rule_name=rule_data.get("rule_name", ""),
             attribute=attribute,
             condition=condition,
@@ -444,7 +542,9 @@ class RuleSetManagementService:
             Dictionary in rule engine format including rules and actionset
         """
         # rules is lazy="dynamic"; ruleset.patterns holds actionset entries (Pattern model)
-        rules_list = list(ruleset.rules.all()) if hasattr(ruleset.rules, "all") else list(ruleset.rules)
+        rules_list = (
+            list(ruleset.rules.all()) if hasattr(ruleset.rules, "all") else list(ruleset.rules)
+        )
         rules_data = [r.to_dict() for r in rules_list]
         actionset_data = [p.pattern_key for p in (ruleset.patterns or [])]
 
@@ -457,12 +557,8 @@ class RuleSetManagementService:
             "is_default": ruleset.is_default,
             "tags": ruleset.tags,
             "metadata": ruleset.extra_metadata,
-            "created_at": ruleset.created_at.isoformat()
-            if ruleset.created_at
-            else None,
-            "updated_at": ruleset.updated_at.isoformat()
-            if ruleset.updated_at
-            else None,
+            "created_at": ruleset.created_at.isoformat() if ruleset.created_at else None,
+            "updated_at": ruleset.updated_at.isoformat() if ruleset.updated_at else None,
             "rules": rules_data,
             "actionset": actionset_data,
         }

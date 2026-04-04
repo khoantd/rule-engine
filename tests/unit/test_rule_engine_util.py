@@ -208,6 +208,78 @@ class TestRulePrepare:
             rule_prepare(sample_condition_objects, rule)
         
         assert exc_info.value.error_code == "RULE_MISSING_MODE"
+
+    def test_rule_prepare_complex_invalid_mode(self, sample_condition_objects):
+        """Invalid mode must not compile to a bogus joiner (e.g. 'nothing')."""
+        rule = {
+            "rulename": "Rule1",
+            "type": "complex",
+            "priority": 1,
+            "conditions": {"items": ["C0001", "C0002"], "mode": "xor"},
+            "rulepoint": 10.0,
+            "weight": 1.0,
+            "action_result": "A",
+        }
+        with pytest.raises(RuleCompilationError) as exc_info:
+            rule_prepare(sample_condition_objects, rule)
+        assert exc_info.value.error_code == "RULE_INVALID_COMPLEX_MODE"
+
+    def test_rule_prepare_complex_inline_items_only(self, sample_condition_objects):
+        """Complex rule may use inline condition dicts without catalog ids."""
+        rule = {
+            "rulename": "InlineComplex",
+            "type": "complex",
+            "priority": 1,
+            "conditions": {
+                "items": [
+                    {"attribute": "issue", "equation": "greater_than", "constant": "30"},
+                    {"attribute": "publisher", "equation": "equal", "constant": "DC"},
+                ],
+                "mode": "and",
+            },
+            "rulepoint": 5.0,
+            "weight": 1.0,
+            "action_result": "OK",
+        }
+        result = rule_prepare(sample_condition_objects, rule)
+        assert "issue" in result["condition"] and "publisher" in result["condition"]
+        assert " and " in result["condition"]
+
+    def test_rule_prepare_complex_mixed_inline_and_id(self, sample_condition_objects):
+        """Complex items may mix condition_id strings and inline dicts."""
+        rule = {
+            "rulename": "Mixed",
+            "type": "complex",
+            "priority": 1,
+            "conditions": {
+                "items": [
+                    "C0001",
+                    {"attribute": "publisher", "equation": "equal", "constant": "DC"},
+                ],
+                "mode": "or",
+            },
+            "rulepoint": 1.0,
+            "weight": 1.0,
+            "action_result": "X",
+        }
+        result = rule_prepare(sample_condition_objects, rule)
+        assert " or " in result["condition"]
+
+    def test_rule_prepare_complex_invalid_item_type(self, sample_condition_objects):
+        with pytest.raises(RuleCompilationError) as exc_info:
+            rule_prepare(
+                sample_condition_objects,
+                {
+                    "rulename": "Bad",
+                    "type": "complex",
+                    "priority": 1,
+                    "conditions": {"items": [123], "mode": "and"},
+                    "rulepoint": 1.0,
+                    "weight": 1.0,
+                    "action_result": "X",
+                },
+            )
+        assert exc_info.value.error_code == "RULE_INVALID_COMPLEX_ITEM"
     
     def test_rule_prepare_condition_not_found(self, sample_condition_objects):
         """Test preparing rule with condition not found raises ConfigurationError."""

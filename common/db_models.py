@@ -70,6 +70,11 @@ class ConditionOperator(str, Enum):
     RANGE = "range"
     CONTAINS = "contains"
     REGEX = "regex"
+    # Explicit regex variants (aligned with common.conditions_enum.equation_operators)
+    REGEX_MATCH = "regex_match"
+    REGEX_SEARCH = "regex_search"
+    REGEX_NOT_MATCH = "regex_not_match"
+    REGEX_NOT_SEARCH = "regex_not_search"
 
 
 class Ruleset(Base):

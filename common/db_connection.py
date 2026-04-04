@@ -25,6 +25,53 @@ _engine: Optional[Engine] = None
 _SessionFactory: Optional[scoped_session] = None
 
 
+def resolve_database_url_optional(env_file: Optional[str] = None) -> Optional[str]:
+    """
+    Resolve database URL from environment without raising.
+
+    Uses TIMESCALE_SERVICE_URL, DATABASE_URL, or PG* variables (same rules as
+    load_database_url). Used to decide whether the API should use the database
+    configuration repository before falling back to file/S3.
+
+    Args:
+        env_file: Optional path to a .env file to load before reading variables.
+
+    Returns:
+        Normalized connection URL, or None if not configured.
+    """
+    if env_file:
+        load_dotenv(env_file)
+    else:
+        load_dotenv(find_dotenv())
+
+    db_url = os.getenv("TIMESCALE_SERVICE_URL") or os.getenv("DATABASE_URL")
+
+    if not db_url:
+        pg_host = os.getenv("PGHOST")
+        pg_port = os.getenv("PGPORT")
+        pg_user = os.getenv("PGUSER")
+        pg_password = os.getenv("PGPASSWORD")
+        pg_database = os.getenv("PGDATABASE")
+        pg_sslmode = os.getenv("PGSSLMODE", "require")
+
+        if pg_host and pg_user and pg_database:
+            db_url = (
+                f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/"
+                f"{pg_database}?sslmode={pg_sslmode}"
+            )
+            logger.info(
+                "Built database URL from PG environment variables",
+                host=pg_host,
+                database=pg_database,
+            )
+
+    if db_url and db_url.startswith("postgres://"):
+        db_url = "postgresql://" + db_url[11:]
+        logger.debug("Normalized database URL scheme from postgres:// to postgresql://")
+
+    return db_url
+
+
 def load_database_url(env_file: Optional[str] = None) -> str:
     """
     Load database URL from environment or .env file.
@@ -38,36 +85,7 @@ def load_database_url(env_file: Optional[str] = None) -> str:
     Raises:
         ConfigurationError: If database URL cannot be loaded
     """
-    # Load .env file if provided or try to find it
-    if env_file:
-        load_dotenv(env_file)
-    else:
-        load_dotenv(find_dotenv())
-
-    # Try to get database URL from environment variable
-    db_url = os.getenv("TIMESCALE_SERVICE_URL") or os.getenv("DATABASE_URL")
-
-    if not db_url:
-        # Try to build from individual PG environment variables
-        pg_host = os.getenv("PGHOST")
-        pg_port = os.getenv("PGPORT")
-        pg_user = os.getenv("PGUSER")
-        pg_password = os.getenv("PGPASSWORD")
-        pg_database = os.getenv("PGDATABASE")
-        pg_sslmode = os.getenv("PGSSLMODE", "require")
-
-        if pg_host and pg_user and pg_database:
-            db_url = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}?sslmode={pg_sslmode}"
-            logger.info(
-                "Built database URL from PG environment variables",
-                host=pg_host,
-                database=pg_database,
-            )
-
-    # SQLAlchemy 2.0 loads the "postgresql" dialect only; normalize postgres:// -> postgresql://
-    if db_url and db_url.startswith("postgres://"):
-        db_url = "postgresql://" + db_url[11:]
-        logger.debug("Normalized database URL scheme from postgres:// to postgresql://")
+    db_url = resolve_database_url_optional(env_file)
 
     if not db_url:
         raise ConfigurationError(
@@ -88,9 +106,7 @@ def load_database_url(env_file: Optional[str] = None) -> str:
     # Validate and sanitize database URL for logging
     parsed = urlparse(db_url)
     safe_url = f"{parsed.scheme}://***:***@{parsed.hostname}:{parsed.port}{parsed.path}"
-    logger.info(
-        "Database URL loaded", safe_url=safe_url, database=parsed.path.lstrip("/")
-    )
+    logger.info("Database URL loaded", safe_url=safe_url, database=parsed.path.lstrip("/"))
 
     return db_url
 
@@ -259,9 +275,7 @@ def get_db_session() -> Session:
         logger.debug("Database session committed")
     except Exception as e:
         session.rollback()
-        logger.error(
-            "Database session rolled back due to error", error=str(e), exc_info=True
-        )
+        logger.error("Database session rolled back due to error", error=str(e), exc_info=True)
         raise
     finally:
         session.close()
@@ -269,9 +283,7 @@ def get_db_session() -> Session:
         logger.debug("Database session closed")
 
 
-def init_database(
-    database_url: Optional[str] = None, env_file: Optional[str] = None
-) -> Engine:
+def init_database(database_url: Optional[str] = None, env_file: Optional[str] = None) -> Engine:
     """
     Initialize database connection.
 
@@ -328,9 +340,7 @@ def test_connection(database_url: Optional[str] = None) -> bool:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT version()"))
             version = result.fetchone()[0]
-            logger.info(
-                "Database connection test successful", version=version.split()[1]
-            )
+            logger.info("Database connection test successful", version=version.split()[1])
 
         return True
 

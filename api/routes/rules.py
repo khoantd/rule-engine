@@ -25,7 +25,7 @@ from api.models import (
 )
 from common.exceptions import DataValidationError
 from common.logger import get_logger
-from services.ruleengine_exec import dmn_rules_exec, rules_exec, rules_exec_batch
+from services.ruleengine_exec import dmn_rules_exec, rules_exec, rules_exec_batch, rules_exec_by_ruleset
 
 logger = get_logger(__name__)
 
@@ -120,8 +120,57 @@ async def execute_rules(
         correlation_id=correlation_id,
         dry_run=request.dry_run,
         data_keys=list(request.data.keys()),
+        request_rules_count=(len(request.rules) if request.rules is not None else None),
     )
     result = rules_exec(
+        data=request.data,
+        dry_run=request.dry_run,
+        correlation_id=correlation_id,
+        consumer_id=request.consumer_id,
+        rules=request.rules,
+    )
+    execution_time_ms = (time.time() - start_time) * 1000
+    response = _rule_execution_response_from_result(
+        result, request.dry_run, execution_time_ms, correlation_id
+    )
+    logger.info(
+        "API rule execution completed",
+        correlation_id=correlation_id,
+        total_points=response.total_points,
+        pattern_result=response.pattern_result,
+        execution_time_ms=execution_time_ms,
+    )
+    return response
+
+
+@router.post(
+    "/{ruleset_name}/execute",
+    response_model=RuleExecutionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Execute a specific ruleset against input data",
+    description=(
+        "Execute business rules from a specific ruleset against input data "
+        "and return scoring results with action recommendations."
+    ),
+)
+async def execute_ruleset(
+    ruleset_name: str,
+    request: RuleExecutionRequest,
+    correlation_id: Optional[str] = Depends(get_correlation_id),
+    api_key: Optional[str] = Depends(get_api_key),
+) -> RuleExecutionResponse:
+    """Execute a specific ruleset against input data."""
+    start_time = time.time()
+    correlation_id = _effective_correlation_id(correlation_id, request.correlation_id)
+    logger.info(
+        "API ruleset execution request",
+        correlation_id=correlation_id,
+        ruleset_name=ruleset_name,
+        dry_run=request.dry_run,
+        data_keys=list(request.data.keys()),
+    )
+    result = rules_exec_by_ruleset(
+        ruleset_name=ruleset_name,
         data=request.data,
         dry_run=request.dry_run,
         correlation_id=correlation_id,
@@ -132,8 +181,9 @@ async def execute_rules(
         result, request.dry_run, execution_time_ms, correlation_id
     )
     logger.info(
-        "API rule execution completed",
+        "API ruleset execution completed",
         correlation_id=correlation_id,
+        ruleset_name=ruleset_name,
         total_points=response.total_points,
         pattern_result=response.pattern_result,
         execution_time_ms=execution_time_ms,
@@ -171,6 +221,7 @@ async def execute_rules_batch(
         max_workers=request.max_workers,
         correlation_id=correlation_id,
         consumer_id=request.consumer_id,
+        rules=request.rules,
     )
     execution_time_ms = (time.time() - start_time) * 1000
     batch_results: List[BatchItemResult] = []
