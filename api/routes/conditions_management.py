@@ -1,31 +1,25 @@
 """
 API routes for Conditions management (CRUD operations).
 
-This module provides REST API endpoints for managing Conditions, including:
-- List all conditions
-- Get a condition by ID
-- Create a new condition
-- Update an existing condition
-- Delete a condition
+Domain exceptions propagate to ``api.middleware.errors``.
 """
 
 from typing import Optional
-from fastapi import APIRouter, HTTPException, status, Depends, Request
 
+from fastapi import APIRouter, Depends, status
+
+from api.deps import get_conditions_management_service_dep, get_correlation_id
+from api.middleware.auth import get_api_key
 from api.models import (
     ConditionCreateRequest,
-    ConditionUpdateRequest,
     ConditionResponse,
     ConditionsListResponse,
-    ErrorResponse
+    ConditionUpdateRequest,
+    ErrorResponse,
 )
-from services.conditions_management import get_conditions_management_service
+from common.exceptions import NotFoundError
 from common.logger import get_logger
-from common.exceptions import (
-    DataValidationError,
-    ConfigurationError,
-)
-from api.middleware.auth import get_api_key
+from services.conditions_management import ConditionsManagementService
 
 logger = get_logger(__name__)
 
@@ -36,8 +30,8 @@ router = APIRouter(
         400: {"model": ErrorResponse, "description": "Bad Request"},
         404: {"model": ErrorResponse, "description": "Not Found"},
         422: {"model": ErrorResponse, "description": "Validation Error"},
-        500: {"model": ErrorResponse, "description": "Internal Server Error"}
-    }
+        500: {"model": ErrorResponse, "description": "Internal Server Error"},
+    },
 )
 
 
@@ -46,54 +40,21 @@ router = APIRouter(
     response_model=ConditionsListResponse,
     status_code=status.HTTP_200_OK,
     summary="List all conditions",
-    description="Retrieve a list of all configured conditions."
+    description="Retrieve a list of all configured conditions.",
 )
 async def list_conditions(
-    http_request: Request,
-    api_key: Optional[str] = Depends(get_api_key)
+    correlation_id: Optional[str] = Depends(get_correlation_id),
+    api_key: Optional[str] = Depends(get_api_key),
+    service: ConditionsManagementService = Depends(get_conditions_management_service_dep),
 ) -> ConditionsListResponse:
-    """
-    List all conditions.
-    
-    Returns:
-        List of all conditions in the system
-        
-    Raises:
-        HTTPException: If listing fails
-    """
-    correlation_id = getattr(http_request.state, 'correlation_id', None)
-    
+    """List all conditions."""
     logger.info("API list conditions request", correlation_id=correlation_id)
-    
-    try:
-        service = get_conditions_management_service()
-        conditions_data = service.list_conditions()
-        
-        # Convert to response models
-        conditions = [
-            ConditionResponse(**condition) for condition in conditions_data
-        ]
-        
-        logger.info("API list conditions completed", correlation_id=correlation_id, count=len(conditions))
-        
-        return ConditionsListResponse(conditions=conditions, count=len(conditions))
-        
-    except ConfigurationError as e:
-        logger.error("Configuration error listing conditions", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=e.to_dict()
-        )
-    except Exception as e:
-        logger.error("Unexpected error listing conditions", error=str(e), correlation_id=correlation_id, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "error_code": "UNEXPECTED_ERROR"
-            }
-        )
+    conditions_data = service.list_conditions()
+    conditions = [ConditionResponse(**condition) for condition in conditions_data]
+    logger.info(
+        "API list conditions completed", correlation_id=correlation_id, count=len(conditions)
+    )
+    return ConditionsListResponse(conditions=conditions, count=len(conditions))
 
 
 @router.get(
@@ -101,73 +62,32 @@ async def list_conditions(
     response_model=ConditionResponse,
     status_code=status.HTTP_200_OK,
     summary="Get a condition by ID",
-    description="Retrieve a specific condition by its identifier."
+    description="Retrieve a specific condition by its identifier.",
 )
 async def get_condition(
     condition_id: str,
-    http_request: Request,
-    api_key: Optional[str] = Depends(get_api_key)
+    correlation_id: Optional[str] = Depends(get_correlation_id),
+    api_key: Optional[str] = Depends(get_api_key),
+    service: ConditionsManagementService = Depends(get_conditions_management_service_dep),
 ) -> ConditionResponse:
-    """
-    Get a condition by ID.
-    
-    Args:
-        condition_id: Condition identifier
-        
-    Returns:
-        Condition details
-        
-    Raises:
-        HTTPException: If condition not found or retrieval fails
-    """
-    correlation_id = getattr(http_request.state, 'correlation_id', None)
-    
-    logger.info("API get condition request", correlation_id=correlation_id, condition_id=condition_id)
-    
-    try:
-        service = get_conditions_management_service()
-        condition_data = service.get_condition(condition_id)
-        
-        if not condition_data:
-            logger.warning("Condition not found", correlation_id=correlation_id, condition_id=condition_id)
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "error_type": "NotFoundError",
-                    "message": f"Condition with ID '{condition_id}' not found",
-                    "error_code": "CONDITION_NOT_FOUND",
-                    "context": {"condition_id": condition_id}
-                }
-            )
-        
-        logger.info("API get condition completed", correlation_id=correlation_id, condition_id=condition_id)
-        
-        return ConditionResponse(**condition_data)
-        
-    except DataValidationError as e:
-        logger.error("Data validation error getting condition", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=e.to_dict()
+    """Get a condition by ID."""
+    logger.info(
+        "API get condition request", correlation_id=correlation_id, condition_id=condition_id
+    )
+    condition_data = service.get_condition(condition_id)
+    if not condition_data:
+        logger.warning(
+            "Condition not found", correlation_id=correlation_id, condition_id=condition_id
         )
-    except HTTPException:
-        raise
-    except ConfigurationError as e:
-        logger.error("Configuration error getting condition", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=e.to_dict()
+        raise NotFoundError(
+            f"Condition with ID '{condition_id}' not found",
+            error_code="CONDITION_NOT_FOUND",
+            context={"condition_id": condition_id},
         )
-    except Exception as e:
-        logger.error("Unexpected error getting condition", error=str(e), correlation_id=correlation_id, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "error_code": "UNEXPECTED_ERROR"
-            }
-        )
+    logger.info(
+        "API get condition completed", correlation_id=correlation_id, condition_id=condition_id
+    )
+    return ConditionResponse(**condition_data)
 
 
 @router.post(
@@ -175,63 +95,28 @@ async def get_condition(
     response_model=ConditionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new condition",
-    description="Create a new condition with the provided configuration."
+    description="Create a new condition with the provided configuration.",
 )
 async def create_condition(
     request: ConditionCreateRequest,
-    http_request: Request,
-    api_key: Optional[str] = Depends(get_api_key)
+    correlation_id: Optional[str] = Depends(get_correlation_id),
+    api_key: Optional[str] = Depends(get_api_key),
+    service: ConditionsManagementService = Depends(get_conditions_management_service_dep),
 ) -> ConditionResponse:
-    """
-    Create a new condition.
-    
-    Args:
-        request: Condition creation request with condition data
-        
-    Returns:
-        Created condition details
-        
-    Raises:
-        HTTPException: If creation fails or validation fails
-    """
-    correlation_id = getattr(http_request.state, 'correlation_id', None)
-    
-    logger.info("API create condition request", correlation_id=correlation_id, condition_id=request.condition_id)
-    
-    try:
-        service = get_conditions_management_service()
-        
-        # Convert request to dict for service
-        condition_data = request.dict(exclude_none=False)
-        
-        created_condition = service.create_condition(condition_data)
-        
-        logger.info("API create condition completed", correlation_id=correlation_id, condition_id=request.condition_id)
-        
-        return ConditionResponse(**created_condition)
-        
-    except DataValidationError as e:
-        logger.error("Data validation error creating condition", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=e.to_dict()
-        )
-    except ConfigurationError as e:
-        logger.error("Configuration error creating condition", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=e.to_dict()
-        )
-    except Exception as e:
-        logger.error("Unexpected error creating condition", error=str(e), correlation_id=correlation_id, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "error_code": "UNEXPECTED_ERROR"
-            }
-        )
+    """Create a new condition."""
+    logger.info(
+        "API create condition request",
+        correlation_id=correlation_id,
+        condition_id=request.condition_id,
+    )
+    condition_data = request.model_dump(exclude_none=False)
+    created_condition = service.create_condition(condition_data)
+    logger.info(
+        "API create condition completed",
+        correlation_id=correlation_id,
+        condition_id=request.condition_id,
+    )
+    return ConditionResponse(**created_condition)
 
 
 @router.put(
@@ -239,135 +124,57 @@ async def create_condition(
     response_model=ConditionResponse,
     status_code=status.HTTP_200_OK,
     summary="Update an existing condition",
-    description="Update an existing condition with new configuration."
+    description="Update an existing condition with new configuration.",
 )
 async def update_condition(
     condition_id: str,
     request: ConditionUpdateRequest,
-    http_request: Request,
-    api_key: Optional[str] = Depends(get_api_key)
+    correlation_id: Optional[str] = Depends(get_correlation_id),
+    api_key: Optional[str] = Depends(get_api_key),
+    service: ConditionsManagementService = Depends(get_conditions_management_service_dep),
 ) -> ConditionResponse:
-    """
-    Update an existing condition.
-    
-    Args:
-        condition_id: Condition identifier
-        request: Condition update request with updated data
-        
-    Returns:
-        Updated condition details
-        
-    Raises:
-        HTTPException: If update fails, condition not found, or validation fails
-    """
-    correlation_id = getattr(http_request.state, 'correlation_id', None)
-    
-    logger.info("API update condition request", correlation_id=correlation_id, condition_id=condition_id)
-    
-    try:
-        service = get_conditions_management_service()
-        
-        # Get existing condition to merge with updates
-        existing_condition = service.get_condition(condition_id)
-        if not existing_condition:
-            logger.warning("Condition not found for update", correlation_id=correlation_id, condition_id=condition_id)
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "error_type": "NotFoundError",
-                    "message": f"Condition with ID '{condition_id}' not found",
-                    "error_code": "CONDITION_NOT_FOUND",
-                    "context": {"condition_id": condition_id}
-                }
-            )
-        
-        # Merge existing data with updates (only non-None fields from request)
-        condition_data = existing_condition.copy()
-        update_data = request.dict(exclude_none=True)
-        condition_data.update(update_data)
-        
-        updated_condition = service.update_condition(condition_id, condition_data)
-        
-        logger.info("API update condition completed", correlation_id=correlation_id, condition_id=condition_id)
-        
-        return ConditionResponse(**updated_condition)
-        
-    except DataValidationError as e:
-        logger.error("Data validation error updating condition", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=e.to_dict()
+    """Update an existing condition."""
+    logger.info(
+        "API update condition request", correlation_id=correlation_id, condition_id=condition_id
+    )
+    existing_condition = service.get_condition(condition_id)
+    if not existing_condition:
+        logger.warning(
+            "Condition not found for update",
+            correlation_id=correlation_id,
+            condition_id=condition_id,
         )
-    except HTTPException:
-        raise
-    except ConfigurationError as e:
-        logger.error("Configuration error updating condition", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=e.to_dict()
+        raise NotFoundError(
+            f"Condition with ID '{condition_id}' not found",
+            error_code="CONDITION_NOT_FOUND",
+            context={"condition_id": condition_id},
         )
-    except Exception as e:
-        logger.error("Unexpected error updating condition", error=str(e), correlation_id=correlation_id, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "error_code": "UNEXPECTED_ERROR"
-            }
-        )
+    condition_data = existing_condition.copy()
+    condition_data.update(request.model_dump(exclude_none=True))
+    updated_condition = service.update_condition(condition_id, condition_data)
+    logger.info(
+        "API update condition completed", correlation_id=correlation_id, condition_id=condition_id
+    )
+    return ConditionResponse(**updated_condition)
 
 
 @router.delete(
     "/{condition_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a condition",
-    description="Delete a condition by its identifier."
+    description="Delete a condition by its identifier.",
 )
 async def delete_condition(
     condition_id: str,
-    http_request: Request,
-    api_key: Optional[str] = Depends(get_api_key)
+    correlation_id: Optional[str] = Depends(get_correlation_id),
+    api_key: Optional[str] = Depends(get_api_key),
+    service: ConditionsManagementService = Depends(get_conditions_management_service_dep),
 ) -> None:
-    """
-    Delete a condition.
-    
-    Args:
-        condition_id: Condition identifier
-        
-    Raises:
-        HTTPException: If deletion fails or condition not found
-    """
-    correlation_id = getattr(http_request.state, 'correlation_id', None)
-    
-    logger.info("API delete condition request", correlation_id=correlation_id, condition_id=condition_id)
-    
-    try:
-        service = get_conditions_management_service()
-        service.delete_condition(condition_id)
-        
-        logger.info("API delete condition completed", correlation_id=correlation_id, condition_id=condition_id)
-        
-    except DataValidationError as e:
-        logger.error("Data validation error deleting condition", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=e.to_dict()
-        )
-    except ConfigurationError as e:
-        logger.error("Configuration error deleting condition", error=str(e), correlation_id=correlation_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=e.to_dict()
-        )
-    except Exception as e:
-        logger.error("Unexpected error deleting condition", error=str(e), correlation_id=correlation_id, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "error_code": "UNEXPECTED_ERROR"
-            }
-        )
-
+    """Delete a condition."""
+    logger.info(
+        "API delete condition request", correlation_id=correlation_id, condition_id=condition_id
+    )
+    service.delete_condition(condition_id)
+    logger.info(
+        "API delete condition completed", correlation_id=correlation_id, condition_id=condition_id
+    )

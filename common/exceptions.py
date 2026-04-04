@@ -10,16 +10,16 @@ from typing import Optional, Dict, Any
 
 class RuleEngineException(Exception):
     """Base exception class for all rule engine exceptions."""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         error_code: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize exception.
-        
+
         Args:
             message: Error message
             error_code: Optional error code for programmatic handling
@@ -29,63 +29,78 @@ class RuleEngineException(Exception):
         self.message = message
         self.error_code = error_code
         self.context = context or {}
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert exception to dictionary for JSON serialization."""
         return {
-            'error_type': self.__class__.__name__,
-            'message': self.message,
-            'error_code': self.error_code,
-            'context': self.context
+            "error_type": self.__class__.__name__,
+            "message": self.message,
+            "error_code": self.error_code,
+            "context": self.context,
         }
 
 
 class ConfigurationError(RuleEngineException):
     """Raised when there's an error in configuration."""
+
     pass
 
 
 class RuleEvaluationError(RuleEngineException):
     """Raised when rule evaluation fails."""
+
     pass
 
 
 class DataValidationError(RuleEngineException):
     """Raised when input data validation fails."""
+
+    pass
+
+
+class NotFoundError(RuleEngineException):
+    """Raised when a requested resource does not exist (HTTP 404)."""
+
     pass
 
 
 class RuleCompilationError(RuleEngineException):
     """Raised when rule compilation fails."""
+
     pass
 
 
 class RuleValidationError(RuleEngineException):
     """Raised when rule validation fails (structure, syntax, or dependency)."""
+
     pass
 
 
 class ConditionError(RuleEngineException):
     """Raised when condition evaluation fails."""
+
     pass
 
 
 class WorkflowError(RuleEngineException):
     """Raised when workflow execution fails."""
+
     pass
 
 
 class StorageError(RuleEngineException):
     """Raised when storage operations fail (S3, etc.)."""
+
     pass
 
 
 class ExternalServiceError(RuleEngineException):
     """Raised when external service calls fail."""
+
     pass
 
 
 class SecurityError(RuleEngineException):
     """Raised when security-related validation fails."""
-    pass
 
+    pass

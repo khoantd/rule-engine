@@ -2,15 +2,18 @@
 API routes for health checks.
 """
 
-from datetime import datetime
 import time
-from typing import Any, Dict, Optional
-from fastapi import APIRouter
+from datetime import datetime
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends
+
+from api.deps import get_hot_reload_service_dep, get_rule_registry_dep
 from api.models import HealthResponse
 from common.config import get_config
 from common.logger import get_logger
-from services.hot_reload import get_hot_reload_service
-from common.rule_registry import get_rule_registry
+from common.rule_registry import RuleRegistry
+from services.hot_reload import HotReloadService
 
 logger = get_logger(__name__)
 
@@ -36,9 +39,6 @@ async def health_check() -> HealthResponse:
     - Timestamp
     - Uptime in seconds
     - Environment name
-
-    Returns:
-        Health response with service status
     """
     try:
         config = get_config()
@@ -77,11 +77,7 @@ async def health_check() -> HealthResponse:
     description="Root endpoint that provides API information.",
 )
 async def root():
-    """
-    Root endpoint.
-
-    Returns basic API information.
-    """
+    """Root endpoint with basic API information."""
     return {
         "name": "Rule Engine API",
         "version": "1.0.0",
@@ -96,31 +92,24 @@ async def root():
     summary="Hot reload health check",
     description="Check health status of hot reload service.",
 )
-async def hot_reload_health_check() -> Dict[str, Any]:
+async def hot_reload_health_check(
+    service: HotReloadService = Depends(get_hot_reload_service_dep),
+    registry: RuleRegistry = Depends(get_rule_registry_dep),
+) -> Dict[str, Any]:
     """
     Hot reload health check endpoint.
 
-    Returns:
-        Hot reload health status including:
-        - status: Health status (healthy/unhealthy)
-        - monitoring_active: Whether monitoring is active
-        - last_reload: Last reload timestamp
-        - registry_stats: Registry statistics
-        - reload_count: Total reload count
+    Returns hot reload health status including monitoring state, registry stats,
+    and structured checks.
     """
     try:
-        service = get_hot_reload_service()
-        registry = get_rule_registry()
-
         status_dict = service.get_status()
 
-        # Determine overall health
         is_healthy = (
             status_dict.get("monitoring_active", False)
             or status_dict.get("last_reload_status") == "success"
         )
 
-        # Check if registry has rules
         registry_stats = registry.get_stats()
         if registry_stats.get("rule_count", 0) == 0:
             is_healthy = False
@@ -141,8 +130,7 @@ async def hot_reload_health_check() -> Dict[str, Any]:
             "checks": {
                 "monitoring_active": status_dict.get("monitoring_active", False),
                 "registry_has_rules": registry_stats.get("rule_count", 0) > 0,
-                "last_reload_successful": status_dict.get("last_reload_status")
-                == "success",
+                "last_reload_successful": status_dict.get("last_reload_status") == "success",
             },
         }
 

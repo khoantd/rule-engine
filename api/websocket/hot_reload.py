@@ -181,3 +181,28 @@ def get_notification_manager() -> ReloadNotificationManager:
     if _notification_manager is None:
         _notification_manager = ReloadNotificationManager()
     return _notification_manager
+
+
+async def hot_reload_websocket_endpoint(websocket: WebSocket) -> None:
+    """
+    WebSocket session for real-time rule reload notifications.
+
+    Connect to ``/ws/hot-reload``. Handles ping/pong and status requests.
+    """
+    manager = get_notification_manager()
+    await manager.connect(websocket)
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            if data.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+            elif data.get("type") == "status":
+                await manager.send_status(websocket)
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected", client_id=id(websocket))
+        await manager.disconnect(websocket)
+    except Exception as e:
+        logger.error("WebSocket error", error=str(e), exc_info=True)
+        await manager.disconnect(websocket)

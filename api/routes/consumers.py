@@ -1,54 +1,52 @@
 """
 Consumer Management API Routes.
+
+Domain exceptions propagate to ``api.middleware.errors``.
 """
 
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import Optional
 
+from fastapi import APIRouter, Depends, Query, status
+
+from api.deps import get_consumer_management_service_dep
 from api.models import (
     ConsumerCreateRequest,
-    ConsumerUpdateRequest,
     ConsumerResponse,
     ConsumersListResponse,
+    ConsumerUpdateRequest,
     ErrorResponse,
 )
-from services.consumer_management import (
-    ConsumerManagementService,
-    get_consumer_management_service,
-)
-from common.exceptions import DataValidationError, ConfigurationError
-from common.logger import get_logger
+from common.exceptions import NotFoundError
+from services.consumer_management import ConsumerManagementService
 
 router = APIRouter(prefix="/consumers", tags=["Consumer Management"])
-logger = get_logger(__name__)
 
 
 @router.get("", response_model=ConsumersListResponse)
 async def list_consumers(
     status: Optional[str] = Query(None, description="Filter by status (active, inactive)"),
-    service: ConsumerManagementService = Depends(get_consumer_management_service),
-):
+    service: ConsumerManagementService = Depends(get_consumer_management_service_dep),
+) -> ConsumersListResponse:
     """List all consumers."""
-    try:
-        consumers = service.list_consumers(status=status)
-        return {"consumers": consumers, "count": len(consumers)}
-    except ConfigurationError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    rows = service.list_consumers(status=status)
+    consumers = [ConsumerResponse(**c) for c in rows]
+    return ConsumersListResponse(consumers=consumers, count=len(consumers))
 
 
 @router.get("/{consumer_id}", response_model=ConsumerResponse)
 async def get_consumer(
     consumer_id: str,
-    service: ConsumerManagementService = Depends(get_consumer_management_service),
-):
+    service: ConsumerManagementService = Depends(get_consumer_management_service_dep),
+) -> ConsumerResponse:
     """Get a consumer by ID."""
     consumer = service.get_consumer(consumer_id)
     if not consumer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Consumer '{consumer_id}' not found",
+        raise NotFoundError(
+            f"Consumer '{consumer_id}' not found",
+            error_code="CONSUMER_NOT_FOUND",
+            context={"consumer_id": consumer_id},
         )
-    return consumer
+    return ConsumerResponse(**consumer)
 
 
 @router.post(
@@ -59,46 +57,28 @@ async def get_consumer(
 )
 async def create_consumer(
     request: ConsumerCreateRequest,
-    service: ConsumerManagementService = Depends(get_consumer_management_service),
-):
+    service: ConsumerManagementService = Depends(get_consumer_management_service_dep),
+) -> ConsumerResponse:
     """Create a new consumer."""
-    try:
-        return service.create_consumer(request.dict())
-    except DataValidationError as e:
-        if e.error_code == "CONSUMER_ALREADY_EXISTS":
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        logger.error("Error in create_consumer route", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    created = service.create_consumer(request.model_dump())
+    return ConsumerResponse(**created)
 
 
 @router.put("/{consumer_id}", response_model=ConsumerResponse)
 async def update_consumer(
     consumer_id: str,
     request: ConsumerUpdateRequest,
-    service: ConsumerManagementService = Depends(get_consumer_management_service),
-):
+    service: ConsumerManagementService = Depends(get_consumer_management_service_dep),
+) -> ConsumerResponse:
     """Update a consumer."""
-    try:
-        return service.update_consumer(consumer_id, request.dict(exclude_unset=True))
-    except DataValidationError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error updating consumer: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    updated = service.update_consumer(consumer_id, request.model_dump(exclude_unset=True))
+    return ConsumerResponse(**updated)
 
 
 @router.delete("/{consumer_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_consumer(
     consumer_id: str,
-    service: ConsumerManagementService = Depends(get_consumer_management_service),
-):
+    service: ConsumerManagementService = Depends(get_consumer_management_service_dep),
+) -> None:
     """Delete a consumer."""
-    try:
-        service.delete_consumer(consumer_id)
-    except DataValidationError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error deleting consumer: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    service.delete_consumer(consumer_id)

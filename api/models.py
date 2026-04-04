@@ -2,43 +2,46 @@
 API request and response models for Rule Engine web service.
 """
 
-from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, Field, validator
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class RuleExecutionRequest(BaseModel):
     """Request model for rule execution."""
-    
+
     data: Dict[str, Any] = Field(..., description="Input data for rule evaluation")
     dry_run: bool = Field(default=False, description="Execute rules without side effects")
     correlation_id: Optional[str] = Field(default=None, description="Correlation ID for tracing")
     consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
-    
-    @validator('data')
-    def validate_data(cls, v):
+
+    @field_validator("data")
+    @classmethod
+    def validate_data(cls, v: Any) -> Any:
         """Validate that data is a non-empty dictionary."""
         if not isinstance(v, dict):
             raise ValueError("data must be a dictionary")
         return v
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "data": {
                     "issue": 35,
                     "title": "Superman",
-                    "publisher": "DC"
+                    "publisher": "DC",
                 },
                 "dry_run": False,
-                "correlation_id": "req-12345"
+                "correlation_id": "req-12345",
             }
         }
+    )
 
 
 class RuleEvaluationResult(BaseModel):
     """Individual rule evaluation result."""
-    
+
     rule_name: str
     rule_priority: Optional[int] = None
     condition: str
@@ -51,41 +54,59 @@ class RuleEvaluationResult(BaseModel):
 
 class RuleExecutionResponse(BaseModel):
     """Response model for rule execution."""
-    
+
     total_points: float = Field(..., description="Sum of weighted rule points")
     pattern_result: str = Field(..., description="Concatenated action results")
-    action_recommendation: Optional[str] = Field(None, description="Recommended action based on pattern")
-    decision_outputs: Optional[Dict[str, Any]] = Field(None, description="Decision outputs from DMN execution (field_name: output_value)")
-    rule_evaluations: Optional[List[RuleEvaluationResult]] = Field(None, description="Detailed rule evaluations (dry_run mode)")
-    would_match: Optional[List[RuleEvaluationResult]] = Field(None, description="Rules that matched (dry_run mode)")
-    would_not_match: Optional[List[RuleEvaluationResult]] = Field(None, description="Rules that didn't match (dry_run mode)")
+    action_recommendation: Optional[str] = Field(
+        None, description="Recommended action based on pattern"
+    )
+    decision_outputs: Optional[Dict[str, Any]] = Field(
+        None, description="Decision outputs from DMN execution (field_name: output_value)"
+    )
+    rule_evaluations: Optional[List[RuleEvaluationResult]] = Field(
+        None, description="Detailed rule evaluations (dry_run mode)"
+    )
+    would_match: Optional[List[RuleEvaluationResult]] = Field(
+        None, description="Rules that matched (dry_run mode)"
+    )
+    would_not_match: Optional[List[RuleEvaluationResult]] = Field(
+        None, description="Rules that didn't match (dry_run mode)"
+    )
     dry_run: Optional[bool] = Field(None, description="Whether this was a dry run")
-    execution_time_ms: Optional[float] = Field(None, description="Total execution time in milliseconds")
+    execution_time_ms: Optional[float] = Field(
+        None, description="Total execution time in milliseconds"
+    )
     correlation_id: Optional[str] = Field(None, description="Correlation ID for tracing")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "total_points": 1050.0,
                 "pattern_result": "YYY",
                 "action_recommendation": "Approved",
                 "correlation_id": "req-12345",
-                "execution_time_ms": 45.2
+                "execution_time_ms": 45.2,
             }
         }
+    )
 
 
 class BatchRuleExecutionRequest(BaseModel):
     """Request model for batch rule execution."""
-    
+
     data_list: List[Dict[str, Any]] = Field(..., description="List of input data dictionaries")
     dry_run: bool = Field(default=False, description="Execute rules without side effects")
-    max_workers: Optional[int] = Field(default=None, description="Maximum number of parallel workers")
-    correlation_id: Optional[str] = Field(default=None, description="Correlation ID for batch tracking")
+    max_workers: Optional[int] = Field(
+        default=None, description="Maximum number of parallel workers"
+    )
+    correlation_id: Optional[str] = Field(
+        default=None, description="Correlation ID for batch tracking"
+    )
     consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
-    
-    @validator('data_list')
-    def validate_data_list(cls, v):
+
+    @field_validator("data_list")
+    @classmethod
+    def validate_data_list(cls, v: Any) -> Any:
         """Validate that data_list is a non-empty list of dictionaries."""
         if not isinstance(v, list) or len(v) == 0:
             raise ValueError("data_list must be a non-empty list")
@@ -93,31 +114,33 @@ class BatchRuleExecutionRequest(BaseModel):
             if not isinstance(item, dict):
                 raise ValueError("All items in data_list must be dictionaries")
         return v
-    
-    @validator('max_workers')
-    def validate_max_workers(cls, v):
+
+    @field_validator("max_workers")
+    @classmethod
+    def validate_max_workers(cls, v: Any) -> Any:
         """Validate max_workers is positive if provided."""
         if v is not None and v <= 0:
             raise ValueError("max_workers must be positive")
         return v
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "data_list": [
                     {"issue": 35, "title": "Superman", "publisher": "DC"},
-                    {"issue": 10, "title": "Batman", "publisher": "DC"}
+                    {"issue": 10, "title": "Batman", "publisher": "DC"},
                 ],
                 "dry_run": False,
                 "max_workers": 4,
-                "correlation_id": "batch-12345"
+                "correlation_id": "batch-12345",
             }
         }
+    )
 
 
 class BatchItemResult(BaseModel):
     """Result for a single item in a batch execution."""
-    
+
     item_index: int
     correlation_id: str
     status: str
@@ -130,14 +153,14 @@ class BatchItemResult(BaseModel):
 
 class BatchRuleExecutionResponse(BaseModel):
     """Response model for batch rule execution."""
-    
+
     batch_id: str = Field(..., description="Batch execution ID")
     results: List[BatchItemResult] = Field(..., description="List of execution results")
     summary: Dict[str, Any] = Field(..., description="Batch execution summary")
     dry_run: Optional[bool] = Field(None, description="Whether this was a dry run")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "batch_id": "batch-12345",
                 "summary": {
@@ -146,29 +169,32 @@ class BatchRuleExecutionResponse(BaseModel):
                     "failed_executions": 0,
                     "total_execution_time_ms": 89.5,
                     "avg_execution_time_ms": 44.75,
-                    "success_rate": 100.0
+                    "success_rate": 100.0,
                 },
-                "dry_run": False
+                "dry_run": False,
             }
         }
+    )
 
 
 class WorkflowExecutionRequest(BaseModel):
     """Request model for workflow execution."""
-    
+
     process_name: str = Field(..., description="Name of the process/workflow")
     stages: List[str] = Field(default_factory=list, description="List of workflow stage names")
     data: Dict[str, Any] = Field(default_factory=dict, description="Input data dictionary")
-    
-    @validator('process_name')
-    def validate_process_name(cls, v):
+
+    @field_validator("process_name")
+    @classmethod
+    def validate_process_name(cls, v: Any) -> Any:
         """Validate process_name is not empty."""
-        if not v or not v.strip():
+        if not v or not str(v).strip():
             raise ValueError("process_name cannot be empty")
-        return v.strip()
-    
-    @validator('stages')
-    def validate_stages(cls, v):
+        return str(v).strip()
+
+    @field_validator("stages")
+    @classmethod
+    def validate_stages(cls, v: Any) -> Any:
         """Validate all stages are non-empty strings."""
         if not isinstance(v, list):
             raise ValueError("stages must be a list")
@@ -176,48 +202,53 @@ class WorkflowExecutionRequest(BaseModel):
             if not isinstance(stage, str) or not stage.strip():
                 raise ValueError(f"Stage at index {i} must be a non-empty string")
         return [s.strip() for s in v]
-    
-    @validator('data')
-    def validate_data(cls, v):
+
+    @field_validator("data")
+    @classmethod
+    def validate_data(cls, v: Any) -> Any:
         """Validate that data is a dictionary."""
         if not isinstance(v, dict):
             raise ValueError("data must be a dictionary")
         return v
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "process_name": "ticket_processing",
                 "stages": ["NEW", "INPROGESS", "FINISHED"],
                 "data": {
                     "ticket_id": "TICK-123",
                     "title": "Issue Report",
-                    "priority": "high"
-                }
+                    "priority": "high",
+                },
             }
         }
+    )
 
 
 class WorkflowExecutionResponse(BaseModel):
     """Response model for workflow execution."""
-    
+
     process_name: str = Field(..., description="Name of the process/workflow")
     stages: List[str] = Field(..., description="List of executed stages")
     result: Optional[Dict[str, Any]] = Field(None, description="Final workflow result")
-    execution_time_ms: Optional[float] = Field(None, description="Total execution time in milliseconds")
-    
-    class Config:
-        json_schema_extra = {
+    execution_time_ms: Optional[float] = Field(
+        None, description="Total execution time in milliseconds"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "process_name": "ticket_processing",
                 "stages": ["NEW", "INPROGESS", "FINISHED"],
                 "result": {
                     "status": "completed",
-                    "data": {"ticket_id": "TICK-123", "state": "FINISHED"}
+                    "data": {"ticket_id": "TICK-123", "state": "FINISHED"},
                 },
-                "execution_time_ms": 123.5
+                "execution_time_ms": 123.5,
             }
         }
+    )
 
 
 class WorkflowStageModel(BaseModel):
@@ -226,13 +257,14 @@ class WorkflowStageModel(BaseModel):
     name: str = Field(..., description="Stage name (e.g. NEW, INPROGESS, FINISHED)")
     position: int = Field(..., description="1-based order of the stage within the workflow")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "NEW",
                 "position": 2,
             }
         }
+    )
 
 
 class WorkflowCreateRequest(BaseModel):
@@ -242,18 +274,20 @@ class WorkflowCreateRequest(BaseModel):
     description: Optional[str] = Field(None, description="Optional workflow description")
     stages: List[str] = Field(..., description="Non-empty ordered list of stage names")
 
-    @validator("name")
-    def validate_name(cls, v: str) -> str:
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: Any) -> Any:
         """Validate workflow name is non-empty after trimming."""
         if v is None:
             raise ValueError("name cannot be None")
-        value = v.strip()
+        value = str(v).strip()
         if not value:
             raise ValueError("name cannot be empty")
         return value
 
-    @validator("stages")
-    def validate_stages(cls, v: List[str]) -> List[str]:
+    @field_validator("stages")
+    @classmethod
+    def validate_stages(cls, v: Any) -> Any:
         """Validate stages list is non-empty and contains non-empty strings."""
         if not isinstance(v, list) or len(v) == 0:
             raise ValueError("stages must be a non-empty list")
@@ -267,14 +301,15 @@ class WorkflowCreateRequest(BaseModel):
             cleaned.append(stage_value)
         return cleaned
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "ticket_processing",
                 "description": "Standard ticket workflow",
                 "stages": ["INITIATED", "NEW", "INPROGESS", "FINISHED"],
             }
         }
+    )
 
 
 class WorkflowUpdateRequest(BaseModel):
@@ -290,8 +325,9 @@ class WorkflowUpdateRequest(BaseModel):
         description="Activate/deactivate workflow (soft delete flag)",
     )
 
-    @validator("stages")
-    def validate_stages(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+    @field_validator("stages")
+    @classmethod
+    def validate_stages(cls, v: Any) -> Any:
         """Validate stages list if provided."""
         if v is None:
             return None
@@ -307,14 +343,15 @@ class WorkflowUpdateRequest(BaseModel):
             cleaned.append(stage_value)
         return cleaned
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "description": "Updated ticket workflow",
                 "stages": ["NEW", "INPROGESS", "FINISHED"],
                 "is_active": True,
             }
         }
+    )
 
 
 class WorkflowResponse(BaseModel):
@@ -323,14 +360,12 @@ class WorkflowResponse(BaseModel):
     name: str = Field(..., description="Workflow name")
     description: Optional[str] = Field(None, description="Workflow description")
     is_active: bool = Field(..., description="Whether the workflow is active")
-    stages: List[WorkflowStageModel] = Field(
-        ..., description="Ordered list of workflow stages"
-    )
+    stages: List[WorkflowStageModel] = Field(..., description="Ordered list of workflow stages")
     created_at: Optional[str] = Field(None, description="Creation timestamp (ISO 8601)")
     updated_at: Optional[str] = Field(None, description="Last update timestamp (ISO 8601)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "ticket_processing",
                 "description": "Standard ticket workflow",
@@ -345,18 +380,17 @@ class WorkflowResponse(BaseModel):
                 "updated_at": "2026-02-04T10:05:00Z",
             }
         }
+    )
 
 
 class WorkflowsListResponse(BaseModel):
     """Response model for listing workflows."""
 
-    workflows: List[WorkflowResponse] = Field(
-        ..., description="List of workflow definitions"
-    )
+    workflows: List[WorkflowResponse] = Field(..., description="List of workflow definitions")
     count: int = Field(..., description="Total number of workflows in this result")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "workflows": [
                     {
@@ -374,6 +408,7 @@ class WorkflowsListResponse(BaseModel):
                 "count": 1,
             }
         }
+    )
 
 
 class WorkflowNamedExecutionRequest(BaseModel):
@@ -385,25 +420,27 @@ class WorkflowNamedExecutionRequest(BaseModel):
         description="Input data passed to the workflow handlers",
     )
 
-    @validator("workflow_name")
-    def validate_workflow_name(cls, v: str) -> str:
+    @field_validator("workflow_name")
+    @classmethod
+    def validate_workflow_name(cls, v: Any) -> Any:
         """Validate workflow_name is non-empty after trimming."""
         if v is None:
             raise ValueError("workflow_name cannot be None")
-        value = v.strip()
+        value = str(v).strip()
         if not value:
             raise ValueError("workflow_name cannot be empty")
         return value
 
-    @validator("data")
-    def validate_data(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+    @field_validator("data")
+    @classmethod
+    def validate_data(cls, v: Any) -> Any:
         """Validate that data is a dictionary."""
         if not isinstance(v, dict):
             raise ValueError("data must be a dictionary")
         return v
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "workflow_name": "ticket_processing",
                 "data": {
@@ -413,55 +450,59 @@ class WorkflowNamedExecutionRequest(BaseModel):
                 },
             }
         }
+    )
 
 
 class HealthResponse(BaseModel):
     """Response model for health check."""
-    
+
     status: str = Field(..., description="Health status")
     version: str = Field(..., description="API version")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Current timestamp")
     uptime_seconds: Optional[float] = Field(None, description="Application uptime in seconds")
     environment: Optional[str] = Field(None, description="Environment name")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": "healthy",
                 "version": "1.0.0",
                 "timestamp": "2024-01-15T10:30:00Z",
                 "uptime_seconds": 3600.0,
-                "environment": "production"
+                "environment": "production",
             }
         }
+    )
 
 
 class ErrorResponse(BaseModel):
     """Error response model."""
-    
+
     error_type: str = Field(..., description="Error type/class name")
     message: str = Field(..., description="Error message")
     error_code: Optional[str] = Field(None, description="Error code for programmatic handling")
     context: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
     correlation_id: Optional[str] = Field(None, description="Correlation ID for tracing")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "error_type": "DataValidationError",
                 "message": "Input data must be a dictionary",
                 "error_code": "DATA_INVALID_TYPE",
                 "context": {"data_type": "str"},
-                "correlation_id": "req-12345"
+                "correlation_id": "req-12345",
             }
         }
+    )
 
 
 # Rule Management Models
 
+
 class RuleCreateRequest(BaseModel):
     """Request model for creating a rule."""
-    
+
     id: str = Field(..., description="Unique rule identifier")
     rule_name: str = Field(..., description="Human-readable rule name")
     type: str = Field(default="simple", description="Rule type: 'simple' or 'complex'")
@@ -472,9 +513,9 @@ class RuleCreateRequest(BaseModel):
     rule_point: Optional[float] = Field(None, description="Base points awarded")
     priority: Optional[int] = Field(None, description="Execution priority")
     action_result: Optional[str] = Field(None, description="Action result string")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "R0004",
                 "rule_name": "Rule 4",
@@ -485,14 +526,15 @@ class RuleCreateRequest(BaseModel):
                 "weight": 0.1,
                 "rule_point": 20,
                 "priority": 1,
-                "action_result": "Y"
+                "action_result": "Y",
             }
         }
+    )
 
 
 class RuleUpdateRequest(BaseModel):
     """Request model for updating a rule."""
-    
+
     rule_name: Optional[str] = Field(None, description="Human-readable rule name")
     type: Optional[str] = Field(None, description="Rule type: 'simple' or 'complex'")
     conditions: Optional[Dict[str, Any]] = Field(None, description="Conditions dictionary")
@@ -506,7 +548,7 @@ class RuleUpdateRequest(BaseModel):
 
 class RuleResponse(BaseModel):
     """Response model for a rule."""
-    
+
     id: str = Field(..., description="Rule identifier")
     rule_name: str = Field(..., description="Rule name")
     type: Optional[str] = Field(None, description="Rule type")
@@ -521,46 +563,50 @@ class RuleResponse(BaseModel):
 
 class RulesListResponse(BaseModel):
     """Response model for listing rules."""
-    
+
     rules: List[RuleResponse] = Field(..., description="List of rules")
     count: int = Field(..., description="Total number of rules")
 
 
 # Condition Management Models
 
+
 class ConditionCreateRequest(BaseModel):
     """Request model for creating a condition."""
-    
+
     condition_id: str = Field(..., description="Unique condition identifier")
     condition_name: str = Field(..., description="Human-readable condition name")
     attribute: str = Field(..., description="Attribute name to check")
     equation: str = Field(..., description="Equation operator (e.g., 'equal', 'greater_than')")
     constant: Union[str, int, float, List[str]] = Field(..., description="Comparison value")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "condition_id": "C0014",
                 "condition_name": "Condition 14",
                 "attribute": "issue",
                 "equation": "greater_than",
-                "constant": "30"
+                "constant": "30",
             }
         }
+    )
 
 
 class ConditionUpdateRequest(BaseModel):
     """Request model for updating a condition."""
-    
+
     condition_name: Optional[str] = Field(None, description="Human-readable condition name")
     attribute: Optional[str] = Field(None, description="Attribute name to check")
     equation: Optional[str] = Field(None, description="Equation operator")
-    constant: Optional[Union[str, int, float, List[str]]] = Field(None, description="Comparison value")
+    constant: Optional[Union[str, int, float, List[str]]] = Field(
+        None, description="Comparison value"
+    )
 
 
 class ConditionResponse(BaseModel):
     """Response model for a condition."""
-    
+
     condition_id: str = Field(..., description="Condition identifier")
     condition_name: str = Field(..., description="Condition name")
     attribute: str = Field(..., description="Attribute name")
@@ -570,12 +616,13 @@ class ConditionResponse(BaseModel):
 
 class ConditionsListResponse(BaseModel):
     """Response model for listing conditions."""
-    
+
     conditions: List[ConditionResponse] = Field(..., description="List of conditions")
     count: int = Field(..., description="Total number of conditions")
 
 
 # Attribute (Fact) Management Models
+
 
 class AttributeCreateRequest(BaseModel):
     """Request model for creating an attribute (fact)."""
@@ -591,8 +638,8 @@ class AttributeCreateRequest(BaseModel):
     )
     description: Optional[str] = Field(None, description="Optional description")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "attribute_id": "issue",
                 "name": "Issue Number",
@@ -600,6 +647,7 @@ class AttributeCreateRequest(BaseModel):
                 "description": "Comic issue number",
             }
         }
+    )
 
 
 class AttributeUpdateRequest(BaseModel):
@@ -629,32 +677,32 @@ class AttributeResponse(BaseModel):
 class AttributesListResponse(BaseModel):
     """Response model for listing attributes."""
 
-    attributes: List[AttributeResponse] = Field(
-        ..., description="List of attributes (facts)"
-    )
+    attributes: List[AttributeResponse] = Field(..., description="List of attributes (facts)")
     count: int = Field(..., description="Total number of attributes")
 
 
 # Action Management Models
 
+
 class ActionCreateRequest(BaseModel):
     """Request model for creating an action."""
-    
+
     pattern: str = Field(..., description="Pattern string (e.g., 'YYY', 'Y--')")
     message: str = Field(..., description="Action recommendation message")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "pattern": "YYY",
-                "message": "Approved"
+                "message": "Approved",
             }
         }
+    )
 
 
 class ActionUpdateRequest(BaseModel):
     """Request model for updating an action."""
-    
+
     pattern: Optional[str] = Field(
         None,
         description=(
@@ -668,9 +716,7 @@ class ActionUpdateRequest(BaseModel):
 class ActionResponse(BaseModel):
     """Response model for an action (pattern entry)."""
 
-    id: Optional[int] = Field(
-        None, description="Internal identifier of the pattern entry"
-    )
+    id: Optional[int] = Field(None, description="Internal identifier of the pattern entry")
     pattern: str = Field(..., description="Pattern string (e.g., 'YYY', 'Y--')")
     message: str = Field(..., description="Action recommendation")
     ruleset_id: Optional[int] = Field(
@@ -695,33 +741,43 @@ class ActionsListResponse(BaseModel):
 
 # RuleSet Management Models
 
+
 class RuleSetCreateRequest(BaseModel):
     """Request model for creating a ruleset."""
-    
+
     ruleset_name: str = Field(..., description="RuleSet name")
-    rules: List[Union[str, Dict[str, Any]]] = Field(default_factory=list, description="List of rule IDs or rule dictionaries")
-    actionset: List[Union[str, Dict[str, Any]]] = Field(default_factory=list, description="List of pattern strings or action dictionaries")
-    
-    class Config:
-        json_schema_extra = {
+    rules: List[Union[str, Dict[str, Any]]] = Field(
+        default_factory=list, description="List of rule IDs or rule dictionaries"
+    )
+    actionset: List[Union[str, Dict[str, Any]]] = Field(
+        default_factory=list, description="List of pattern strings or action dictionaries"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "ruleset_name": "my_ruleset",
                 "rules": ["R0001", "R0002"],
-                "actionset": ["YYY", "Y--"]
+                "actionset": ["YYY", "Y--"],
             }
         }
+    )
 
 
 class RuleSetUpdateRequest(BaseModel):
     """Request model for updating a ruleset."""
-    
-    rules: Optional[List[Union[str, Dict[str, Any]]]] = Field(None, description="List of rule IDs or rule dictionaries")
-    actionset: Optional[List[Union[str, Dict[str, Any]]]] = Field(None, description="List of pattern strings or action dictionaries")
+
+    rules: Optional[List[Union[str, Dict[str, Any]]]] = Field(
+        None, description="List of rule IDs or rule dictionaries"
+    )
+    actionset: Optional[List[Union[str, Dict[str, Any]]]] = Field(
+        None, description="List of pattern strings or action dictionaries"
+    )
 
 
 class RuleSetResponse(BaseModel):
     """Response model for a ruleset."""
-    
+
     ruleset_name: str = Field(..., description="RuleSet name")
     rules: List[Dict[str, Any]] = Field(..., description="List of rules")
     actionset: List[str] = Field(..., description="List of pattern strings")
@@ -729,25 +785,28 @@ class RuleSetResponse(BaseModel):
 
 class RuleSetsListResponse(BaseModel):
     """Response model for listing rulesets."""
-    
+
     rulesets: List[RuleSetResponse] = Field(..., description="List of rulesets")
     count: int = Field(..., description="Total number of rulesets")
 
 
 # DMN Upload Models
 
+
 class DMNUploadResponse(BaseModel):
     """Response model for DMN file upload and parsing."""
-    
+
     filename: str = Field(..., description="Name of the uploaded DMN file")
     file_path: str = Field(..., description="Path where the uploaded DMN file was saved")
     rules: List[RuleResponse] = Field(..., description="List of parsed rules in app format")
-    patterns: Dict[str, str] = Field(default_factory=dict, description="Dictionary of patterns (if any)")
+    patterns: Dict[str, str] = Field(
+        default_factory=dict, description="Dictionary of patterns (if any)"
+    )
     rules_count: int = Field(..., description="Total number of parsed rules")
     correlation_id: Optional[str] = Field(None, description="Correlation ID for tracing")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "filename": "sample_rules.dmn",
                 "file_path": "data/input/sample_rules.dmn",
@@ -759,40 +818,44 @@ class DMNUploadResponse(BaseModel):
                         "conditions": {
                             "attribute": "value",
                             "equation": "greater_than",
-                            "constant": "10"
+                            "constant": "10",
                         },
                         "description": "value greater_than 10",
                         "result": "Approved",
                         "weight": 1.0,
                         "rule_point": 10.0,
                         "priority": 1,
-                        "action_result": "Approved"
+                        "action_result": "Approved",
                     }
                 ],
                 "patterns": {},
                 "rules_count": 1,
-                "correlation_id": "req-12345"
+                "correlation_id": "req-12345",
             }
         }
+    )
 
 
 class DMNRuleExecutionRequest(BaseModel):
     """Request model for DMN rule execution."""
-    
-    dmn_file: Optional[str] = Field(None, description="Path to DMN file (relative to data/input or absolute path)")
+
+    dmn_file: Optional[str] = Field(
+        None, description="Path to DMN file (relative to data/input or absolute path)"
+    )
     dmn_content: Optional[str] = Field(None, description="DMN XML content as string")
     data: Dict[str, Any] = Field(..., description="Input data for rule evaluation")
     dry_run: bool = Field(default=False, description="Execute rules without side effects")
     correlation_id: Optional[str] = Field(default=None, description="Correlation ID for tracing")
     consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
-    
-    @validator('data')
-    def validate_data(cls, v):
+
+    @field_validator("data")
+    @classmethod
+    def validate_data(cls, v: Any) -> Any:
         """Validate that data is a dictionary."""
         if not isinstance(v, dict):
             raise ValueError("data must be a dictionary")
         return v
-    
+
     def validate_dmn_source_provided(self):
         """Validate that exactly one DMN source is provided."""
         sources = [self.dmn_file, self.dmn_content]
@@ -801,26 +864,28 @@ class DMNRuleExecutionRequest(BaseModel):
             raise ValueError("Exactly one of dmn_file or dmn_content must be provided")
         if len(provided) > 1:
             raise ValueError("Only one of dmn_file or dmn_content can be provided")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "dmn_file": "data/input/sample_rules.dmn",
                 "data": {
                     "season": "Fall",
-                    "guests": 6
+                    "guests": 6,
                 },
                 "dry_run": False,
-                "correlation_id": "req-12345"
+                "correlation_id": "req-12345",
             }
         }
+    )
 
 
 # Consumer Management Models
 
+
 class ConsumerCreateRequest(BaseModel):
     """Request model for creating a consumer."""
-    
+
     consumer_id: str = Field(..., description="Unique consumer identifier")
     name: str = Field(..., description="Consumer name")
     description: Optional[str] = Field(None, description="Consumer description")
@@ -828,22 +893,23 @@ class ConsumerCreateRequest(BaseModel):
     tags: Optional[List[str]] = Field(None, description="List of tags")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "consumer_id": "client_1",
                 "name": "Test Client",
                 "description": "For testing purposes",
                 "status": "active",
                 "tags": ["test", "internal"],
-                "metadata": {"env": "staging"}
+                "metadata": {"env": "staging"},
             }
         }
+    )
 
 
 class ConsumerUpdateRequest(BaseModel):
     """Request model for updating a consumer."""
-    
+
     name: Optional[str] = Field(None, description="Consumer name")
     description: Optional[str] = Field(None, description="Consumer description")
     status: Optional[str] = Field(None, description="Consumer status: active, inactive")
@@ -853,7 +919,7 @@ class ConsumerUpdateRequest(BaseModel):
 
 class ConsumerResponse(BaseModel):
     """Response model for a consumer."""
-    
+
     id: int = Field(..., description="Internal identifier")
     consumer_id: str = Field(..., description="Unique consumer identifier")
     name: str = Field(..., description="Consumer name")
@@ -867,7 +933,6 @@ class ConsumerResponse(BaseModel):
 
 class ConsumersListResponse(BaseModel):
     """Response model for listing consumers."""
-    
+
     consumers: List[ConsumerResponse] = Field(..., description="List of consumers")
     count: int = Field(..., description="Total number of consumers")
-

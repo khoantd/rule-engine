@@ -15,69 +15,98 @@ from common.exceptions import (
     ConfigurationError,
     RuleEvaluationError,
     WorkflowError,
-    SecurityError
+    SecurityError,
+    NotFoundError,
 )
 from common.logger import get_logger
 from api.models import ErrorResponse
 
 logger = get_logger(__name__)
 
+# DataValidationError codes that represent missing resources (HTTP 404).
+_NOT_FOUND_VALIDATION_CODES = frozenset(
+    {
+        "RULE_NOT_FOUND",
+        "RULESET_NOT_FOUND",
+        "CONDITION_NOT_FOUND",
+        "CONSUMER_NOT_FOUND",
+        "ATTRIBUTE_NOT_FOUND",
+        "WORKFLOW_NOT_FOUND",
+        "TEST_NOT_FOUND",
+        "VERSION_NOT_FOUND",
+        "PATTERN_NOT_FOUND",
+        "ACTION_NOT_FOUND",
+        "DMN_FILE_NOT_FOUND",
+    }
+)
+
+_CONFLICT_VALIDATION_CODES = frozenset(
+    {
+        "CONSUMER_ALREADY_EXISTS",
+    }
+)
+
+
+def _error_response_payload(error_response: ErrorResponse) -> dict:
+    """Serialize ErrorResponse for JSON (Pydantic v2)."""
+    return error_response.model_dump()
+
 
 def create_error_response(
-    error: Exception,
-    status_code: int,
-    correlation_id: str = None
+    error: Exception, status_code: int, correlation_id: str = None
 ) -> JSONResponse:
     """
     Create standardized error response.
-    
+
     Args:
         error: Exception instance
         status_code: HTTP status code
         correlation_id: Optional correlation ID
-        
+
     Returns:
         JSONResponse with error details
     """
     error_data = None
-    
+
     if isinstance(error, RuleEngineException):
         error_data = error.to_dict()
-    elif isinstance(error, StarletteHTTPException) and isinstance(getattr(error, 'detail', None), dict):
+    elif isinstance(error, StarletteHTTPException) and isinstance(
+        getattr(error, "detail", None), dict
+    ):
         error_data = dict(error.detail)
     else:
         error_data = {
-            'error_type': error.__class__.__name__,
-            'message': str(error),
-            'error_code': None,
-            'context': {}
+            "error_type": error.__class__.__name__,
+            "message": str(error),
+            "error_code": None,
+            "context": {},
         }
-    
-    error_response = ErrorResponse(
-        **error_data,
-        correlation_id=correlation_id
-    )
-    
-    return JSONResponse(
+
+    error_response = ErrorResponse(**error_data, correlation_id=correlation_id)
+
+    response = JSONResponse(
         status_code=status_code,
-        content=error_response.dict()
+        content=_error_response_payload(error_response),
     )
+    if correlation_id:
+        response.headers["X-Correlation-ID"] = correlation_id
+    return response
 
 
 async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     Global exception handler for unhandled exceptions.
-    
+
     Args:
         request: FastAPI request
         exc: Exception instance
-        
+
     Returns:
         JSONResponse with error details
     """
-    correlation_id = getattr(request.state, 'correlation_id', None)
+    correlation_id = getattr(request.state, "correlation_id", None)
     is_http_exc = isinstance(exc, StarletteHTTPException)
-    status_code = getattr(exc, 'status_code', None) if is_http_exc else None
+    status_code = getattr(exc, "status_code", None) if is_http_exc else None
 
     if is_http_exc and status_code is not None and status_code < 500:
         if status_code == 404:
@@ -93,6 +122,22 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
                 path=request.url.path,
                 correlation_id=correlation_id,
             )
+    elif isinstance(exc, DataValidationError):
+        logger.warning(
+            "Data validation error",
+            error_detail=str(exc),
+            error_code=exc.error_code,
+            path=request.url.path,
+            correlation_id=correlation_id,
+        )
+    elif isinstance(exc, NotFoundError):
+        logger.warning(
+            "Resource not found",
+            error_detail=str(exc),
+            error_code=exc.error_code,
+            path=request.url.path,
+            correlation_id=correlation_id,
+        )
     else:
         logger.error(
             "Unhandled exception in API",
@@ -100,10 +145,16 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
             error_type=type(exc).__name__,
             path=request.url.path,
             correlation_id=correlation_id,
-            exc_info=True
+            exc_info=True,
         )
-    
+
     # Handle specific exception types
+    if isinstance(exc, NotFoundError):
+        return create_error_response(exc, 404, correlation_id)
+    if isinstance(exc, DataValidationError) and exc.error_code in _NOT_FOUND_VALIDATION_CODES:
+        return create_error_response(exc, 404, correlation_id)
+    if isinstance(exc, DataValidationError) and exc.error_code in _CONFLICT_VALIDATION_CODES:
+        return create_error_response(exc, 409, correlation_id)
     if isinstance(exc, DataValidationError):
         return create_error_response(exc, 400, correlation_id)
     elif isinstance(exc, ConfigurationError):
@@ -120,43 +171,43 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         return create_error_response(exc, exc.status_code, correlation_id)
     else:
         # Generic error for unhandled exceptions
-        return create_error_response(
-            Exception("Internal server error"),
-            500,
-            correlation_id
-        )
+        return create_error_response(Exception("Internal server error"), 500, correlation_id)
 
 
-def validation_exception_handler(request: FastAPIRequest, exc: RequestValidationError) -> FastAPIJSONResponse:
+def validation_exception_handler(
+    request: FastAPIRequest, exc: RequestValidationError
+) -> FastAPIJSONResponse:
     """
     Handler for request validation errors.
-    
+
     Args:
         request: FastAPI request
         exc: Validation exception
-        
+
     Returns:
         JSONResponse with validation error details
     """
-    correlation_id = getattr(request.state, 'correlation_id', None)
-    
+    correlation_id = getattr(request.state, "correlation_id", None)
+
     logger.warning(
         "Request validation error",
         errors=exc.errors(),
         path=request.url.path,
-        correlation_id=correlation_id
+        correlation_id=correlation_id,
     )
-    
+
     error_response = ErrorResponse(
         error_type="ValidationError",
         message="Request validation failed",
         error_code="VALIDATION_ERROR",
         context={"errors": exc.errors()},
-        correlation_id=correlation_id
-    )
-    
-    return FastAPIJSONResponse(
-        status_code=422,
-        content=error_response.dict()
+        correlation_id=correlation_id,
     )
 
+    response = FastAPIJSONResponse(
+        status_code=422,
+        content=_error_response_payload(error_response),
+    )
+    if correlation_id:
+        response.headers["X-Correlation-ID"] = correlation_id
+    return response
