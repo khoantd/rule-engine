@@ -6,53 +6,59 @@ import pytest
 from unittest.mock import MagicMock, patch, Mock
 from typing import Dict, Any
 
-from services.ruleengine_exec import validate_input_data, rules_exec
-from common.exceptions import DataValidationError, RuleEvaluationError, ConfigurationError
+from services.ruleengine_exec import validate_input_data, rules_exec, rules_exec_by_ruleset
+from common.repository.db_repository import DatabaseConfigRepository
+from common.exceptions import (
+    DataValidationError,
+    RuleEvaluationError,
+    ConfigurationError,
+    RuleCompilationError,
+)
 
 
 class TestValidateInputData:
     """Tests for validate_input_data function."""
-    
+
     def test_validate_input_data_valid_dict(self, sample_input_data):
         """Test validation with valid dictionary."""
         result = validate_input_data(sample_input_data)
         assert result == sample_input_data
-    
+
     def test_validate_input_data_empty_dict(self):
         """Test validation with empty dictionary."""
         result = validate_input_data({})
         assert result == {}
-    
+
     def test_validate_input_data_none(self):
         """Test validation with None raises DataValidationError."""
         with pytest.raises(DataValidationError) as exc_info:
             validate_input_data(None)
-        
+
         assert exc_info.value.error_code == "DATA_NONE"
-    
+
     def test_validate_input_data_invalid_type(self):
         """Test validation with invalid type raises DataValidationError."""
         with pytest.raises(DataValidationError) as exc_info:
             validate_input_data("not a dict")
-        
+
         assert exc_info.value.error_code == "DATA_INVALID_TYPE"
-    
+
     def test_validate_input_data_list(self):
         """Test validation with list raises DataValidationError."""
         with pytest.raises(DataValidationError) as exc_info:
             validate_input_data([1, 2, 3])
-        
+
         assert exc_info.value.error_code == "DATA_INVALID_TYPE"
 
 
 class TestRulesExec:
     """Tests for rules_exec function."""
-    
-    @patch('services.ruleengine_exec.rules_set_setup')
-    @patch('services.ruleengine_exec.rules_set_cfg_read')
-    @patch('services.ruleengine_exec.rule_run')
-    @patch('services.ruleengine_exec.actions_set_cfg_read')
-    @patch('services.ruleengine_exec.find_action_recommendation')
+
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.actions_set_cfg_read")
+    @patch("services.ruleengine_exec.find_action_recommendation")
     def test_rules_exec_success(
         self,
         mock_find_action,
@@ -61,7 +67,7 @@ class TestRulesExec:
         mock_rules_cfg_read,
         mock_rules_set_setup,
         sample_input_data,
-        sample_prepared_rules_list
+        sample_prepared_rules_list,
     ):
         """Test successful rules execution."""
         # Setup mocks
@@ -69,85 +75,77 @@ class TestRulesExec:
         mock_rules_set_setup.return_value = sample_prepared_rules_list
         mock_rule_run.side_effect = [
             {"action_result": "A", "rule_point": 10.0, "weight": 1.0},
-            {"action_result": "B", "rule_point": 20.0, "weight": 1.5}
+            {"action_result": "B", "rule_point": 20.0, "weight": 1.5},
         ]
         mock_actions_cfg.return_value = {"AB": "APPROVED"}
         mock_find_action.return_value = "APPROVED"
-        
+
         # Execute
         result = rules_exec(sample_input_data)
-        
+
         # Assertions
         assert result["total_points"] == 40.0  # (10 * 1.0) + (20 * 1.5)
         assert result["pattern_result"] == "AB"
         assert result["action_recommendation"] == "APPROVED"
         mock_rules_set_setup.assert_called_once()
         assert mock_rule_run.call_count == 2
-    
+
     def test_rules_exec_invalid_input(self):
         """Test rules_exec with invalid input raises DataValidationError."""
         with pytest.raises(DataValidationError):
             rules_exec(None)
-    
-    @patch('services.ruleengine_exec.rules_set_setup')
-    @patch('services.ruleengine_exec.rules_set_cfg_read')
+
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
     def test_rules_exec_no_rules(
-        self,
-        mock_rules_cfg_read,
-        mock_rules_set_setup,
-        sample_input_data
+        self, mock_rules_cfg_read, mock_rules_set_setup, sample_input_data
     ):
         """Test rules_exec with no rules returns default result."""
         mock_rules_cfg_read.return_value = []
         mock_rules_set_setup.return_value = []
-        
+
         result = rules_exec(sample_input_data)
-        
+
         assert result["total_points"] == 0.0
         assert result["pattern_result"] == ""
         assert result["action_recommendation"] is None
-    
-    @patch('services.ruleengine_exec.rules_set_setup')
-    @patch('services.ruleengine_exec.rules_set_cfg_read')
+
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
     def test_rules_exec_config_error(
-        self,
-        mock_rules_cfg_read,
-        mock_rules_set_setup,
-        sample_input_data
+        self, mock_rules_cfg_read, mock_rules_set_setup, sample_input_data
     ):
         """Test rules_exec with configuration error raises ConfigurationError."""
         mock_rules_cfg_read.return_value = []
-        mock_rules_set_setup.side_effect = ConfigurationError("Config error", error_code="CONFIG_ERROR")
-        
+        mock_rules_set_setup.side_effect = ConfigurationError(
+            "Config error", error_code="CONFIG_ERROR"
+        )
+
         with pytest.raises(ConfigurationError) as exc_info:
             rules_exec(sample_input_data)
-        
+
         assert exc_info.value.error_code == "CONFIG_ERROR"
-    
-    @patch('services.ruleengine_exec.rules_set_setup')
-    @patch('services.ruleengine_exec.rules_set_cfg_read')
-    @patch('services.ruleengine_exec.rule_run')
+
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
     def test_rules_exec_invalid_rule_structure(
-        self,
-        mock_rule_run,
-        mock_rules_cfg_read,
-        mock_rules_set_setup,
-        sample_input_data
+        self, mock_rule_run, mock_rules_cfg_read, mock_rules_set_setup, sample_input_data
     ):
         """Test rules_exec with invalid rule structure raises RuleEvaluationError."""
         mock_rules_cfg_read.return_value = []
         mock_rules_set_setup.return_value = ["not a dict"]  # Invalid rule
-        
+
         with pytest.raises(RuleEvaluationError) as exc_info:
             rules_exec(sample_input_data)
-        
+
         assert exc_info.value.error_code == "RULE_INVALID_STRUCTURE"
-    
-    @patch('services.ruleengine_exec.rules_set_setup')
-    @patch('services.ruleengine_exec.rules_set_cfg_read')
-    @patch('services.ruleengine_exec.rule_run')
-    @patch('services.ruleengine_exec.actions_set_cfg_read')
-    @patch('services.ruleengine_exec.find_action_recommendation')
+
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.actions_set_cfg_read")
+    @patch("services.ruleengine_exec.find_action_recommendation")
     def test_rules_exec_rule_error_continues(
         self,
         mock_find_action,
@@ -156,29 +154,29 @@ class TestRulesExec:
         mock_rules_cfg_read,
         mock_rules_set_setup,
         sample_input_data,
-        sample_prepared_rules_list
+        sample_prepared_rules_list,
     ):
         """Test rules_exec continues execution when one rule fails."""
         mock_rules_cfg_read.return_value = []
         mock_rules_set_setup.return_value = sample_prepared_rules_list
         mock_rule_run.side_effect = [
             {"action_result": "A", "rule_point": 10.0, "weight": 1.0},
-            Exception("Rule error")  # Second rule fails
+            Exception("Rule error"),  # Second rule fails
         ]
         mock_actions_cfg.return_value = {"A": "APPROVED"}
         mock_find_action.return_value = "APPROVED"
-        
+
         result = rules_exec(sample_input_data)
-        
+
         # Should continue and return partial result
         assert result["total_points"] == 10.0
         assert result["pattern_result"] == "A"
-    
-    @patch('services.ruleengine_exec.rules_set_setup')
-    @patch('services.ruleengine_exec.rules_set_cfg_read')
-    @patch('services.ruleengine_exec.rule_run')
-    @patch('services.ruleengine_exec.actions_set_cfg_read')
-    @patch('services.ruleengine_exec.find_action_recommendation')
+
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.actions_set_cfg_read")
+    @patch("services.ruleengine_exec.find_action_recommendation")
     def test_rules_exec_invalid_points_weight(
         self,
         mock_find_action,
@@ -187,7 +185,7 @@ class TestRulesExec:
         mock_rules_cfg_read,
         mock_rules_set_setup,
         sample_input_data,
-        sample_prepared_rules_list
+        sample_prepared_rules_list,
     ):
         """Test rules_exec handles invalid points/weight gracefully."""
         mock_rules_cfg_read.return_value = []
@@ -195,21 +193,21 @@ class TestRulesExec:
         mock_rule_run.return_value = {
             "action_result": "A",
             "rule_point": "invalid",  # Invalid type
-            "weight": "invalid"  # Invalid type
+            "weight": "invalid",  # Invalid type
         }
         mock_actions_cfg.return_value = {"A": "APPROVED"}
         mock_find_action.return_value = "APPROVED"
-        
+
         result = rules_exec(sample_input_data)
-        
+
         # Should handle gracefully with 0 points
         assert result["total_points"] == 0.0
         assert result["pattern_result"] == "AA"  # Both rules return "A"
-    
-    @patch('services.ruleengine_exec.rules_set_setup')
-    @patch('services.ruleengine_exec.rules_set_cfg_read')
-    @patch('services.ruleengine_exec.rule_run')
-    @patch('services.ruleengine_exec.actions_set_cfg_read')
+
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.actions_set_cfg_read")
     def test_rules_exec_actions_config_error(
         self,
         mock_actions_cfg,
@@ -217,20 +215,16 @@ class TestRulesExec:
         mock_rules_cfg_read,
         mock_rules_set_setup,
         sample_input_data,
-        sample_prepared_rules_list
+        sample_prepared_rules_list,
     ):
         """Test rules_exec handles actions config error gracefully."""
         mock_rules_cfg_read.return_value = []
         mock_rules_set_setup.return_value = sample_prepared_rules_list
-        mock_rule_run.return_value = {
-            "action_result": "A",
-            "rule_point": 10.0,
-            "weight": 1.0
-        }
+        mock_rule_run.return_value = {"action_result": "A", "rule_point": 10.0, "weight": 1.0}
         mock_actions_cfg.side_effect = ConfigurationError("Actions config error")
-        
+
         result = rules_exec(sample_input_data)
-        
+
         # Should continue without action recommendation
         assert result["action_recommendation"] is None
 
@@ -321,3 +315,199 @@ class TestRulesExec:
             rules_exec(sample_input_data, rules=rules)
         assert exc_info.value.error_code == "RULE_INVALID_COMPLEX_MODE"
 
+
+class TestRulesExecByRuleset:
+    """Tests for rules_exec_by_ruleset (multi-rule ruleset execution and diagnostics)."""
+
+    @patch("services.ruleengine_exec.get_execution_history")
+    @patch("services.ruleengine_exec.get_metrics")
+    @patch("services.ruleengine_exec.find_action_recommendation")
+    @patch("services.ruleengine_exec.actions_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("common.repository.config_repository.get_config_repository")
+    def test_rules_exec_by_ruleset_runs_all_prepared_rules(
+        self,
+        mock_get_repo,
+        mock_rules_set_setup,
+        mock_rule_run,
+        mock_actions_cfg,
+        mock_find_action,
+        mock_get_metrics,
+        mock_get_history,
+        sample_input_data,
+        sample_prepared_rules_list,
+    ):
+        """All prepared rules in the list are executed and scored."""
+        mock_repo = MagicMock()
+        mock_repo.read_rules_set.return_value = [{"rulename": "r1"}, {"rulename": "r2"}]
+        mock_get_repo.return_value = mock_repo
+        mock_rules_set_setup.return_value = sample_prepared_rules_list
+        mock_rule_run.side_effect = [
+            {"action_result": "A", "rule_point": 10.0, "weight": 1.0},
+            {"action_result": "B", "rule_point": 20.0, "weight": 1.5},
+        ]
+        mock_actions_cfg.return_value = {"AB": "APPROVED"}
+        mock_find_action.return_value = "APPROVED"
+        mock_get_metrics.return_value = MagicMock()
+        mock_get_history.return_value = MagicMock()
+
+        result = rules_exec_by_ruleset("my_ruleset", sample_input_data)
+
+        mock_repo.read_rules_set.assert_called_once_with("my_ruleset")
+        assert mock_rule_run.call_count == 2
+        assert result["ruleset_name"] == "my_ruleset"
+        assert result["total_points"] == 40.0
+        assert result["pattern_result"] == "AB"
+        assert result["action_recommendation"] == "APPROVED"
+
+    @patch("services.ruleengine_exec.get_execution_history")
+    @patch("services.ruleengine_exec.get_metrics")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("common.repository.config_repository.get_config_repository")
+    def test_rules_exec_by_ruleset_database_repo_resolve_and_metrics_base(
+        self,
+        mock_get_repo,
+        mock_rules_set_setup,
+        mock_rule_run,
+        mock_get_metrics,
+        mock_get_history,
+        sample_input_data,
+        sample_prepared_rule,
+    ):
+        """DB repository uses resolve_action_recommendation; metrics use base label only."""
+
+        class StubRepo(DatabaseConfigRepository):
+            def read_rules_set(self, source=None):
+                return [{"rulename": "r1"}]
+
+            def resolve_action_recommendation_for_pattern(self, ruleset_source, pattern_result):
+                assert ruleset_source == "my_ruleset"
+                assert pattern_result == "A"
+                return ("Approved | Notify", "Approved")
+
+        mock_get_repo.return_value = StubRepo()
+        mock_rules_set_setup.return_value = [sample_prepared_rule]
+        mock_rule_run.return_value = {"action_result": "A", "rule_point": 10.0, "weight": 1.0}
+        metrics_mock = MagicMock()
+        mock_get_metrics.return_value = metrics_mock
+        mock_get_history.return_value = MagicMock()
+
+        result = rules_exec_by_ruleset("my_ruleset", sample_input_data)
+
+        assert result["action_recommendation"] == "Approved | Notify"
+        metrics_mock.track_action.assert_called_once_with("Approved")
+
+    @patch("services.ruleengine_exec.get_execution_history")
+    @patch("services.ruleengine_exec.get_metrics")
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("common.repository.config_repository.get_config_repository")
+    def test_rules_exec_by_ruleset_rulecompilationerror_propagates(
+        self,
+        mock_get_repo,
+        mock_rules_set_setup,
+        mock_get_metrics,
+        mock_get_history,
+        sample_input_data,
+    ):
+        """RuleCompilationError from rules_set_setup is re-raised after logging context."""
+        mock_repo = MagicMock()
+        mock_repo.read_rules_set.return_value = [{"rulename": "r1"}, {"rulename": "r2"}]
+        mock_get_repo.return_value = mock_repo
+        mock_rules_set_setup.side_effect = RuleCompilationError(
+            "prepare failed",
+            error_code="RULE_PREP_ERR",
+            context={"rule": "r2"},
+        )
+        mock_get_metrics.return_value = MagicMock()
+        mock_get_history.return_value = MagicMock()
+
+        with pytest.raises(RuleCompilationError) as exc_info:
+            rules_exec_by_ruleset("my_ruleset", sample_input_data)
+
+        assert exc_info.value.error_code == "RULE_PREP_ERR"
+
+    @patch("services.ruleengine_exec.get_execution_history")
+    @patch("services.ruleengine_exec.get_metrics")
+    @patch("services.ruleengine_exec.find_action_recommendation")
+    @patch("services.ruleengine_exec.actions_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("common.repository.config_repository.get_config_repository")
+    def test_rules_exec_by_ruleset_continues_after_rule_runtime_error(
+        self,
+        mock_get_repo,
+        mock_rules_set_setup,
+        mock_rule_run,
+        mock_actions_cfg,
+        mock_find_action,
+        mock_get_metrics,
+        mock_get_history,
+        sample_input_data,
+        sample_prepared_rules_list,
+    ):
+        """Non-RuleEvaluationError during a rule is logged; remaining rules still run."""
+        mock_repo = MagicMock()
+        mock_repo.read_rules_set.return_value = [{"rulename": "r1"}, {"rulename": "r2"}]
+        mock_get_repo.return_value = mock_repo
+        mock_rules_set_setup.return_value = sample_prepared_rules_list
+        mock_rule_run.side_effect = [
+            ValueError("runtime failure"),
+            {"action_result": "B", "rule_point": 5.0, "weight": 1.0},
+        ]
+        mock_actions_cfg.return_value = {}
+        mock_find_action.return_value = None
+        mock_get_metrics.return_value = MagicMock()
+        mock_get_history.return_value = MagicMock()
+
+        result = rules_exec_by_ruleset("rs1", sample_input_data, dry_run=True)
+
+        assert mock_rule_run.call_count == 2
+        assert result["pattern_result"] == "B"
+        assert result["total_points"] == 5.0
+        assert len(result["rule_evaluations"]) == 1
+
+    @patch("services.ruleengine_exec.logger")
+    @patch("services.ruleengine_exec.get_execution_history")
+    @patch("services.ruleengine_exec.get_metrics")
+    @patch("services.ruleengine_exec.find_action_recommendation")
+    @patch("services.ruleengine_exec.actions_set_cfg_read")
+    @patch("services.ruleengine_exec.rule_run")
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("common.repository.config_repository.get_config_repository")
+    def test_rules_exec_by_ruleset_warns_when_prepared_count_differs_from_raw(
+        self,
+        mock_get_repo,
+        mock_rules_set_setup,
+        mock_rule_run,
+        mock_actions_cfg,
+        mock_find_action,
+        mock_get_metrics,
+        mock_get_history,
+        mock_logger,
+        sample_input_data,
+        sample_prepared_rules_list,
+    ):
+        """If rules_set_setup returns fewer rules than raw, a warning is logged."""
+        mock_repo = MagicMock()
+        mock_repo.read_rules_set.return_value = [
+            {"rulename": "r1"},
+            {"rulename": "r2"},
+            {"rulename": "r3"},
+        ]
+        mock_get_repo.return_value = mock_repo
+        mock_rules_set_setup.return_value = sample_prepared_rules_list
+        mock_rule_run.side_effect = [
+            {"action_result": "A", "rule_point": 1.0, "weight": 1.0},
+            {"action_result": "B", "rule_point": 1.0, "weight": 1.0},
+        ]
+        mock_actions_cfg.return_value = {}
+        mock_find_action.return_value = None
+        mock_get_metrics.return_value = MagicMock()
+        mock_get_history.return_value = MagicMock()
+
+        rules_exec_by_ruleset("rs1", sample_input_data)
+
+        warn_messages = [c.args[0] for c in mock_logger.warning.call_args_list if c.args]
+        assert any("Prepared rule count differs from raw rules" in m for m in warn_messages)

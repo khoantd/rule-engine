@@ -197,6 +197,24 @@ def rules_set_exec(
                     "Skipping rule with empty attribute or condition; fix or remove the rule.",
                     rule_name=rn,
                     error_code=e.error_code,
+                    detail=str(e),
+                    context=getattr(e, "context", None),
+                )
+                continue
+            # Degenerate DB rows: empty legacy columns and no rule_engine / condition_ids
+            if (
+                getattr(e, "error_code", None) == "RULE_INVALID_CONDITIONS"
+                and isinstance(rule, dict)
+                and _is_degenerate_db_flat_placeholder(rule)
+            ):
+                rn = rule.get("rule_name", rule.get("rulename", "unknown"))
+                logger.warning(
+                    "Skipping rule with degenerate DB condition placeholders; "
+                    "fix conditions or metadata.rule_engine / condition_ids, or remove the rule.",
+                    rule_name=rn,
+                    error_code=e.error_code,
+                    detail=str(e),
+                    context=getattr(e, "context", None),
                 )
                 continue
             raise
@@ -241,6 +259,104 @@ def _format_rule_error_message(
     return f"Rule '{rule_name}': {detail}"
 
 
+def _rule_dict_explicit_engine_type(rule: Dict[str, Any]) -> bool:
+    """True if rule declares a supported engine type (case-insensitive)."""
+    t = rule.get("type")
+    if not isinstance(t, str):
+        return False
+    return t.strip().lower() in ("simple", "complex", "standard")
+
+
+def _rule_dict_has_structured_condition_refs(rule: Dict[str, Any]) -> bool:
+    """
+    True if ``conditions`` references the catalog (item / condition_id / items list).
+
+    Inline shapes ``{attribute, equation, constant}`` are not structured refs.
+    """
+    conds = rule.get("conditions")
+    if not isinstance(conds, dict):
+        return False
+    items = conds.get("items")
+    if isinstance(items, list) and len(items) > 0:
+        return True
+    if "item" in conds:
+        val = conds.get("item")
+        if val is None:
+            return False
+        if isinstance(val, str):
+            return bool(val.strip())
+        return True
+    if "condition_id" in conds:
+        val = conds.get("condition_id")
+        if val is None:
+            return False
+        if isinstance(val, str):
+            return bool(val.strip())
+        return True
+    return False
+
+
+def _should_use_structured_extrule_kwargs(rule: Dict[str, Any]) -> bool:
+    """Prefer structured ExtRule kwargs when catalog references or typed conditions exist."""
+    if not isinstance(rule, dict):
+        return False
+    conds = rule.get("conditions")
+    if not isinstance(conds, dict):
+        return False
+    if _rule_dict_has_structured_condition_refs(rule):
+        return True
+    if _rule_dict_explicit_engine_type(rule) and ("item" in conds or "items" in conds):
+        return True
+    return False
+
+
+def _is_degenerate_db_flat_placeholder(rule: Dict[str, Any]) -> bool:
+    """
+    Detect legacy DB placeholder rows (empty attribute, default operator, empty constant).
+
+    These must not be treated as inline rules nor silently skipped as CONDITION_EMPTY.
+    """
+    flat_attr = rule.get("attribute")
+    flat_eq = rule.get("condition")
+    flat_const = rule.get("constant")
+    attr_str = (flat_attr if flat_attr is not None else "").strip() if flat_attr is not None else ""
+    eq_str = (flat_eq if flat_eq is not None else "").strip() if flat_eq is not None else ""
+    const_str = "" if flat_const is None else str(flat_const).strip()
+    if attr_str or const_str:
+        return False
+    return eq_str in ("", "equal")
+
+
+def _build_extrule_kwargs_structured(rule: Dict[str, Any]) -> Dict[str, Any]:
+    """Build ExtRule kwargs from structured / file-style rule dict."""
+    raw_type = rule.get("type", "simple")
+    if raw_type == "standard":
+        raw_type = "simple"
+    if isinstance(raw_type, str) and raw_type.strip().lower() == "standard":
+        raw_type = "simple"
+    kwargs = {k: rule[k] for k in _EXTRULE_KEYS if k in rule}
+    if "rule_name" not in kwargs and "rulename" in rule:
+        kwargs["rule_name"] = rule["rulename"]
+    if "rule_point" not in kwargs and "rulepoint" in rule:
+        kwargs["rule_point"] = float(rule["rulepoint"])
+    if "type" not in kwargs:
+        kwargs["type"] = raw_type
+    else:
+        kt = kwargs["type"]
+        if kt == "standard" or (isinstance(kt, str) and kt.strip().lower() == "standard"):
+            kwargs["type"] = "simple"
+    kwargs.setdefault("id", rule.get("id", ""))
+    kwargs.setdefault("rule_name", rule.get("rule_name", rule.get("rulename", "unknown")))
+    kwargs.setdefault("conditions", rule.get("conditions"))
+    kwargs.setdefault("description", rule.get("description", rule.get("message", "")))
+    kwargs.setdefault("result", rule.get("result", rule.get("action_result", "")))
+    kwargs.setdefault("rule_point", float(rule.get("rule_point", rule.get("rulepoint", 0))))
+    kwargs.setdefault("weight", float(rule.get("weight", 0)))
+    kwargs.setdefault("priority", int(rule.get("priority", 0)))
+    kwargs.setdefault("action_result", rule.get("action_result", rule.get("result", "")))
+    return kwargs
+
+
 def _rule_dict_to_extrule_kwargs(
     conditionss_set: List[Condition],
     rule: Dict[str, Any],
@@ -252,117 +368,98 @@ def _rule_dict_to_extrule_kwargs(
     - Structured: rule has 'conditions' (with 'item' or 'items'), 'description', 'result'.
     - Flat: rule has 'attribute', 'condition', 'constant', 'message' (inline condition).
       Resolves the inline condition via conditionss_set and builds conditions.item.
+
+    Structured rules are handled first so DB rows that include both legacy columns and
+    ``metadata.rule_engine`` always use catalog references (avoids CONDITION_EMPTY skips).
     """
-    # Flat format: attribute, condition (equation), constant, message
-    if "attribute" in rule or "condition" in rule or "constant" in rule:
-        attr = rule.get("attribute")
-        equation = rule.get("condition")
-        constant = rule.get("constant")
-        attr_str = (attr if attr is not None else "").strip() if attr is not None else ""
-        equation_str = (
-            (equation if equation is not None else "").strip() if equation is not None else ""
+    if _should_use_structured_extrule_kwargs(rule):
+        return _build_extrule_kwargs_structured(rule)
+
+    has_flat_keys = "attribute" in rule or "condition" in rule or "constant" in rule
+    attr = rule.get("attribute")
+    equation = rule.get("condition")
+    constant = rule.get("constant")
+    attr_str = (attr if attr is not None else "").strip() if attr is not None else ""
+    equation_str = (
+        (equation if equation is not None else "").strip() if equation is not None else ""
+    )
+
+    if has_flat_keys and attr_str and equation_str:
+        constant_str = str(constant) if constant is not None else ""
+        condition_id = None
+        for cond in conditionss_set:
+            if (
+                getattr(cond, "attribute", None) == attr
+                and getattr(cond, "equation", None) == equation
+                and str(getattr(cond, "constant", "")) == constant_str
+            ):
+                condition_id = cond.condition_id
+                break
+        if condition_id is None:
+            rn = rule.get("rule_name", rule.get("rulename", "unknown"))
+            cond_info = f"attribute={attr!r}, condition={equation!r}, constant={constant_str!r}"
+            raise RuleCompilationError(
+                _format_rule_error_message(
+                    rn,
+                    f"no matching condition for {cond_info}",
+                    conditions_info=cond_info,
+                ),
+                error_code="CONDITION_NOT_FOUND",
+                context={
+                    "rule_name": rn,
+                    "attribute": attr,
+                    "condition": equation,
+                    "constant": constant,
+                },
+            )
+        return {
+            "id": rule.get("id", ""),
+            "rule_name": rule.get("rule_name", rule.get("rulename", "unknown")),
+            "conditions": {"item": condition_id},
+            "description": rule.get("message", rule.get("description", "")),
+            "result": rule.get("action_result", rule.get("result", "")),
+            "rule_point": float(rule.get("rule_point", 0)),
+            "weight": float(rule.get("weight", 0)),
+            "priority": int(rule.get("priority", 0)),
+            "type": "simple",
+            "action_result": rule.get("action_result", rule.get("result", "")),
+        }
+
+    if has_flat_keys and (attr is not None or equation is not None or constant is not None):
+        rn = rule.get("rule_name", rule.get("rulename", "unknown"))
+        cond_info = f"attribute={attr!r}, condition={equation!r}, constant={constant!r}"
+        if _is_degenerate_db_flat_placeholder(rule):
+            raise RuleCompilationError(
+                _format_rule_error_message(
+                    rn,
+                    "rule has no executable conditions (empty legacy columns and no "
+                    "metadata.rule_engine / condition_ids). Fix or remove the rule.",
+                    conditions_info=cond_info,
+                ),
+                error_code="RULE_INVALID_CONDITIONS",
+                context={
+                    "rule_name": rn,
+                    "attribute": attr,
+                    "condition": equation,
+                    "constant": constant,
+                },
+            )
+        raise RuleCompilationError(
+            _format_rule_error_message(
+                rn,
+                "empty attribute or condition; cannot resolve. Fix or remove the rule.",
+                conditions_info=cond_info,
+            ),
+            error_code="CONDITION_EMPTY",
+            context={
+                "rule_name": rn,
+                "attribute": attr,
+                "condition": equation,
+                "constant": constant,
+            },
         )
-        # Reject empty or whitespace-only attribute before lookup (clearer error)
-        if (attr is not None or equation is not None or constant is not None) and not attr_str:
-            rn = rule.get("rule_name", rule.get("rulename", "unknown"))
-            cond_info = f"attribute={attr!r}, condition={equation!r}, constant={constant!r}"
-            raise RuleCompilationError(
-                _format_rule_error_message(
-                    rn,
-                    "empty attribute or condition; cannot resolve. Fix or remove the rule.",
-                    conditions_info=cond_info,
-                ),
-                error_code="CONDITION_EMPTY",
-                context={
-                    "rule_name": rn,
-                    "attribute": attr,
-                    "condition": equation,
-                    "constant": constant,
-                },
-            )
-        if attr_str and equation_str:
-            constant_str = str(constant) if constant is not None else ""
-            condition_id = None
-            for cond in conditionss_set:
-                if (
-                    getattr(cond, "attribute", None) == attr
-                    and getattr(cond, "equation", None) == equation
-                    and str(getattr(cond, "constant", "")) == constant_str
-                ):
-                    condition_id = cond.condition_id
-                    break
-            if condition_id is None:
-                rn = rule.get("rule_name", rule.get("rulename", "unknown"))
-                cond_info = f"attribute={attr!r}, condition={equation!r}, constant={constant_str!r}"
-                raise RuleCompilationError(
-                    _format_rule_error_message(
-                        rn,
-                        f"no matching condition for {cond_info}",
-                        conditions_info=cond_info,
-                    ),
-                    error_code="CONDITION_NOT_FOUND",
-                    context={
-                        "rule_name": rn,
-                        "attribute": attr,
-                        "condition": equation,
-                        "constant": constant,
-                    },
-                )
-            kwargs = {
-                "id": rule.get("id", ""),
-                "rule_name": rule.get("rule_name", rule.get("rulename", "unknown")),
-                "conditions": {"item": condition_id},
-                "description": rule.get("message", rule.get("description", "")),
-                "result": rule.get("action_result", rule.get("result", "")),
-                "rule_point": float(rule.get("rule_point", 0)),
-                "weight": float(rule.get("weight", 0)),
-                "priority": int(rule.get("priority", 0)),
-                "type": "simple",
-                "action_result": rule.get("action_result", rule.get("result", "")),
-            }
-            return kwargs
-        if attr is not None or equation is not None or constant is not None:
-            rn = rule.get("rule_name", rule.get("rulename", "unknown"))
-            cond_info = f"attribute={attr!r}, condition={equation!r}, constant={constant!r}"
-            raise RuleCompilationError(
-                _format_rule_error_message(
-                    rn,
-                    "empty attribute or condition; cannot resolve. Fix or remove the rule.",
-                    conditions_info=cond_info,
-                ),
-                error_code="CONDITION_EMPTY",
-                context={
-                    "rule_name": rn,
-                    "attribute": attr,
-                    "condition": equation,
-                    "constant": constant,
-                },
-            )
-    # Structured format: only pass keys ExtRule accepts (with aliases)
-    raw_type = rule.get("type", "simple")
-    if raw_type == "standard":
-        raw_type = "simple"
-    kwargs = {k: rule[k] for k in _EXTRULE_KEYS if k in rule}
-    # Support alternate config keys: rulename -> rule_name, rulepoint -> rule_point
-    if "rule_name" not in kwargs and "rulename" in rule:
-        kwargs["rule_name"] = rule["rulename"]
-    if "rule_point" not in kwargs and "rulepoint" in rule:
-        kwargs["rule_point"] = float(rule["rulepoint"])
-    if "type" not in kwargs:
-        kwargs["type"] = raw_type
-    else:
-        kwargs["type"] = "simple" if kwargs["type"] == "standard" else kwargs["type"]
-    # Ensure required ExtRule fields exist
-    kwargs.setdefault("id", rule.get("id", ""))
-    kwargs.setdefault("rule_name", rule.get("rule_name", rule.get("rulename", "unknown")))
-    kwargs.setdefault("conditions", rule.get("conditions"))
-    kwargs.setdefault("description", rule.get("description", rule.get("message", "")))
-    kwargs.setdefault("result", rule.get("result", rule.get("action_result", "")))
-    kwargs.setdefault("rule_point", float(rule.get("rule_point", rule.get("rulepoint", 0))))
-    kwargs.setdefault("weight", float(rule.get("weight", 0)))
-    kwargs.setdefault("priority", int(rule.get("priority", 0)))
-    kwargs.setdefault("action_result", rule.get("action_result", rule.get("result", "")))
-    return kwargs
+
+    return _build_extrule_kwargs_structured(rule)
 
 
 def rule_prepare(

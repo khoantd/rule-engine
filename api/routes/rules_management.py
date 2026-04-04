@@ -138,6 +138,12 @@ async def update_rule(
     rule_data = existing_rule.copy()
     update_data = request.model_dump(exclude_none=True)
     rule_data.update(update_data)
+    # Only one of result/action_result may be sent; drop the stale alias from the
+    # merged dict so update_rule does not overwrite the client's field.
+    if "result" in update_data and "action_result" not in update_data:
+        rule_data.pop("action_result", None)
+    elif "action_result" in update_data and "result" not in update_data:
+        rule_data.pop("result", None)
     updated_rule = service.update_rule(rule_id, rule_data)
     logger.info("API update rule completed", correlation_id=correlation_id, rule_id=rule_id)
     return RuleResponse(**updated_rule)

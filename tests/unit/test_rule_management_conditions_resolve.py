@@ -12,6 +12,7 @@ from common.db_models import Base, Condition, RuleStatus
 from common.exceptions import DataValidationError
 from common.repository.db_repository import DatabaseConfigRepository
 from services.rule_management import (
+    _assert_resolved_rule_executable,
     _normalize_complex_mode,
     _resolve_rule_conditions_for_db,
 )
@@ -122,3 +123,108 @@ def test_database_config_repository_rule_to_dict_prefers_rule_engine() -> None:
     assert out["type"] == "complex"
     assert out["conditions"]["items"] == ["C1", "C2"]
     assert out["rulename"] == "Rule one"
+
+
+@pytest.mark.unit
+def test_database_config_repository_rule_to_dict_condition_ids_fallback() -> None:
+    """Rows with condition_ids but no rule_engine still prepare as simple-by-reference."""
+    rule = SimpleNamespace(
+        rule_id="R1",
+        rule_name="Ref only",
+        extra_metadata={"condition_ids": {"condition_id": "C1"}},
+        message="m",
+        rule_point=1,
+        weight=1.0,
+        priority=0,
+        action_result="Y",
+    )
+    out = DatabaseConfigRepository()._rule_to_dict(rule)
+    assert out["type"] == "simple"
+    assert out["conditions"] == {"item": "C1"}
+    assert "attribute" not in out
+
+
+@pytest.mark.unit
+def test_database_config_repository_rule_to_dict_rule_engine_type_case_insensitive() -> None:
+    rule = SimpleNamespace(
+        rule_id="R1",
+        rule_name="Case",
+        extra_metadata={
+            "rule_engine": {
+                "type": "Simple",
+                "conditions": {"item": "C1"},
+            }
+        },
+        message="",
+        rule_point=1,
+        weight=1.0,
+        priority=0,
+        action_result="Y",
+    )
+    out = DatabaseConfigRepository()._rule_to_dict(rule)
+    assert out["type"] == "simple"
+    assert out["conditions"] == {"item": "C1"}
+
+
+@pytest.mark.unit
+def test_database_config_repository_rule_to_dict_infers_type_from_conditions() -> None:
+    """When type is omitted but conditions carry items/mode, infer complex."""
+    rule = SimpleNamespace(
+        rule_id="R1",
+        rule_name="Infer",
+        extra_metadata={
+            "rule_engine": {
+                "conditions": {"items": ["C1", "C2"], "mode": "inclusive"},
+            }
+        },
+        message="",
+        rule_point=1,
+        weight=1.0,
+        priority=0,
+        action_result="Y",
+    )
+    out = DatabaseConfigRepository()._rule_to_dict(rule)
+    assert out["type"] == "complex"
+    assert out["conditions"]["items"] == ["C1", "C2"]
+
+
+@pytest.mark.unit
+def test_database_config_repository_rule_to_dict_infers_simple_from_item_only() -> None:
+    rule = SimpleNamespace(
+        rule_id="R1",
+        rule_name="Infer simple",
+        extra_metadata={"rule_engine": {"conditions": {"item": "C1"}}},
+        message="",
+        rule_point=1,
+        weight=1.0,
+        priority=0,
+        action_result="Y",
+    )
+    out = DatabaseConfigRepository()._rule_to_dict(rule)
+    assert out["type"] == "simple"
+    assert out["conditions"] == {"item": "C1"}
+
+
+@pytest.mark.unit
+def test_assert_resolved_rule_executable_rejects_degenerate_row() -> None:
+    with pytest.raises(DataValidationError) as exc:
+        _assert_resolved_rule_executable("", "equal", "", {})
+    assert exc.value.error_code == "RULE_CONDITIONS_MISSING"
+
+
+@pytest.mark.unit
+def test_database_config_repository_rule_to_dict_metadata_conditions_at_root() -> None:
+    """Recover rules where API-shaped conditions were stored on metadata root."""
+    rule = SimpleNamespace(
+        rule_id="R1",
+        rule_name="Root",
+        extra_metadata={"conditions": {"item": "C1"}},
+        message="",
+        rule_point=1,
+        weight=1.0,
+        priority=0,
+        action_result="Y",
+    )
+    out = DatabaseConfigRepository()._rule_to_dict(rule)
+    assert out["type"] == "simple"
+    assert out["conditions"] == {"item": "C1"}

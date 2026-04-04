@@ -6,10 +6,10 @@ It integrates with the existing repository pattern and supports CRUD operations 
 rulesets, conditions, actions, and actionset entries (stored as Pattern).
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime
 
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import and_, or_, desc, asc
 
 from common.repository.config_repository import ConfigRepository
@@ -31,6 +31,85 @@ from common.logger import get_logger
 from common.exceptions import ConfigurationError
 
 logger = get_logger(__name__)
+
+
+def default_actionset_placeholder_message(pattern_key: str) -> str:
+    """
+    Placeholder stored on Pattern when ruleset actionset lists a key without a message.
+
+    Kept in one place so execution can detect it and prefer linked Action text.
+    """
+    return "Action for {}".format(pattern_key)
+
+
+def _single_linked_action_text(action: Any) -> Optional[str]:
+    """Human text for one Action row: description, else name, else configuration.message."""
+    desc = (getattr(action, "description", None) or "").strip()
+    if desc:
+        return desc
+    name = (getattr(action, "name", None) or "").strip()
+    if name:
+        return name
+    cfg = getattr(action, "configuration", None)
+    if isinstance(cfg, dict):
+        msg = cfg.get("message")
+        if isinstance(msg, str) and msg.strip():
+            return msg.strip()
+    return None
+
+
+def _linked_action_message_parts(actions: Optional[List[Any]]) -> List[str]:
+    """
+    Build ordered human-readable parts from linked Action rows (ORM or duck-typed).
+
+    Uses ACTIVE status only, sorted by ``id`` ascending.
+
+    Args:
+        actions: Pattern.actions collection or None.
+
+    Returns:
+        Non-empty message strings for concatenation.
+    """
+    if not actions:
+        return []
+    active = [a for a in actions if getattr(a, "status", None) == RuleStatus.ACTIVE.value]
+    active.sort(key=lambda a: getattr(a, "id", 0) or 0)
+    parts: List[str] = []
+    for action in active:
+        text = _single_linked_action_text(action)
+        if text:
+            parts.append(text)
+    return parts
+
+
+def format_action_recommendation_with_linked_actions(
+    base_recommendation: str,
+    actions: Optional[List[Any]],
+    pattern_key: Optional[str] = None,
+) -> str:
+    """
+    Combine pattern action_recommendation with linked Action messages.
+
+    Multiple linked parts are joined with `` | `` (space-pipe-space).
+
+    When ``pattern_key`` is set and ``base_recommendation`` equals the default
+    placeholder (no message in actionset), returns only linked action text so the
+    API shows the real message instead of ``Action for <key>``.
+
+    Args:
+        base_recommendation: Value from Pattern.action_recommendation.
+        actions: Linked actions for the pattern (and/or orphans matched by action_id).
+        pattern_key: Matched pattern key, for placeholder detection.
+
+    Returns:
+        Display string for API ``action_recommendation``.
+    """
+    parts = _linked_action_message_parts(actions)
+    if not parts:
+        return base_recommendation
+    if pattern_key and base_recommendation == default_actionset_placeholder_message(pattern_key):
+        return " | ".join(parts)
+    return "{} | {}".format(base_recommendation, " | ".join(parts))
 
 
 class DatabaseConfigRepository(ConfigRepository):
@@ -147,6 +226,13 @@ class DatabaseConfigRepository(ConfigRepository):
                 if not ruleset:
                     # Try to get any active ruleset
                     ruleset = self._get_default_or_active_ruleset(session)
+                    if ruleset:
+                        logger.warning(
+                            "Ruleset not found by requested name; using fallback active ruleset",
+                            requested_ruleset=source,
+                            loaded_ruleset_name=ruleset.name,
+                            loaded_ruleset_id=ruleset.id,
+                        )
 
                 if not ruleset:
                     logger.warning("No active ruleset found", ruleset=source)
@@ -281,6 +367,120 @@ class DatabaseConfigRepository(ConfigRepository):
                 context={"ruleset": source, "error": str(e)},
             ) from e
 
+    def resolve_action_recommendation_for_pattern(
+        self,
+        ruleset_source: Optional[str],
+        pattern_result: Optional[str],
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Resolve actionset entry for a pattern string, including linked Action text.
+
+        Loads Pattern rows for the ruleset with actions eager-loaded. The first pattern
+        whose ``pattern_key`` equals ``pattern_result`` wins.
+
+        Args:
+            ruleset_source: Ruleset name (same as ``read_patterns`` source).
+            pattern_result: Concatenated rule action results (e.g. ``YYY``).
+
+        Returns:
+            ``(display_recommendation, metric_label)``. ``metric_label`` is always
+            ``Pattern.action_recommendation`` when matched (for stable metrics);
+            ``display_recommendation`` uses linked active Action messages
+            (description, else name, else ``configuration.message``). If the pattern
+            text is the default placeholder ``Action for <key>``, linked text replaces
+            it; otherwise linked parts are appended after `` | ``. Orphan ``Action``
+            rows with ``pattern_id`` NULL and ``action_id`` equal to the pattern key
+            are included.
+            ``(None, None)`` if ruleset missing, no patterns, no match, or
+            ``pattern_result`` is None/empty.
+        """
+        if pattern_result is None or (
+            isinstance(pattern_result, str) and not pattern_result.strip()
+        ):
+            return (None, None)
+
+        logger.debug(
+            "Resolving action recommendation with linked actions",
+            ruleset=ruleset_source,
+            pattern_result=pattern_result,
+        )
+
+        try:
+            with get_db_session() as session:
+                ruleset = self._get_ruleset_by_name(session, ruleset_source)
+                if not ruleset:
+                    ruleset = self._get_default_or_active_ruleset(session)
+                if not ruleset:
+                    logger.warning(
+                        "No active ruleset for action recommendation resolution",
+                        ruleset=ruleset_source,
+                    )
+                    return (None, None)
+
+                patterns = (
+                    session.query(Pattern)
+                    .options(joinedload(Pattern.actions))
+                    .filter(Pattern.ruleset_id == ruleset.id)
+                    .all()
+                )
+
+                matched: Optional[Pattern] = None
+                for p in patterns:
+                    if p.pattern_key == pattern_result:
+                        matched = p
+                        break
+
+                if not matched:
+                    logger.debug(
+                        "No pattern match for action recommendation",
+                        ruleset=ruleset.name,
+                        pattern_result=pattern_result,
+                    )
+                    return (None, None)
+
+                base = matched.action_recommendation
+
+                linked_actions: List[Action] = []
+                seen_ids: set = set()
+                for a in matched.actions or []:
+                    if a.id not in seen_ids:
+                        seen_ids.add(a.id)
+                        linked_actions.append(a)
+
+                orphans = (
+                    session.query(Action)
+                    .filter(
+                        Action.pattern_id.is_(None),
+                        Action.action_id == pattern_result,
+                        Action.status == RuleStatus.ACTIVE.value,
+                    )
+                    .all()
+                )
+                for a in orphans:
+                    if a.id not in seen_ids:
+                        seen_ids.add(a.id)
+                        linked_actions.append(a)
+
+                linked_actions.sort(key=lambda x: x.id)
+                display = format_action_recommendation_with_linked_actions(
+                    base, linked_actions, matched.pattern_key
+                )
+                return (display, base)
+
+        except Exception as e:
+            logger.error(
+                "Failed to resolve action recommendation from database",
+                ruleset=ruleset_source,
+                pattern_result=pattern_result,
+                error=str(e),
+                exc_info=True,
+            )
+            raise ConfigurationError(
+                f"Failed to resolve action recommendation from database: {str(e)}",
+                error_code="ACTION_RESOLVE_DB_ERROR",
+                context={"ruleset": ruleset_source, "error": str(e)},
+            ) from e
+
     def read_json(self, source: Optional[str] = None) -> Union[Dict[str, Any], List[Any]]:
         """
         Read configuration as JSON from database.
@@ -318,13 +518,93 @@ class DatabaseConfigRepository(ConfigRepository):
                 context={"ruleset": source, "error": str(e)},
             ) from e
 
+    def _structured_rule_dict_for_engine(self, rule: Rule) -> Optional[Dict[str, Any]]:
+        """
+        Build structured rule-engine dict from ``metadata.rule_engine`` / ``condition_ids``.
+
+        Normalizes type casing, maps ``standard`` → ``simple``, and infers ``type`` when
+        metadata stores ``conditions`` without an explicit ``type`` (common with partial
+        JSON or older clients) so rules are not mis-serialized to legacy flat rows that
+        trigger ``CONDITION_EMPTY`` during preparation.
+
+        Returns:
+            Structured dict for ``rule_prepare``, or None to fall back to legacy flat.
+        """
+        meta = rule.extra_metadata or {}
+
+        def _pack(rule_type: str, conds: Dict[str, Any]) -> Dict[str, Any]:
+            return {
+                "id": rule.rule_id,
+                "rule_name": rule.rule_name,
+                "rulename": rule.rule_name,
+                "type": rule_type,
+                "conditions": conds,
+                "description": rule.message or "",
+                "message": rule.message,
+                "rulepoint": float(rule.rule_point),
+                "rule_point": rule.rule_point,
+                "weight": rule.weight,
+                "priority": rule.priority,
+                "action_result": rule.action_result,
+                "result": rule.action_result,
+            }
+
+        eng = meta.get("rule_engine")
+        if isinstance(eng, dict):
+            conds = eng.get("conditions")
+            if isinstance(conds, dict):
+                raw_type = eng.get("type")
+                resolved: Optional[str] = None
+                if isinstance(raw_type, str):
+                    tnorm = raw_type.strip().lower()
+                    if tnorm == "standard":
+                        tnorm = "simple"
+                    if tnorm in ("simple", "complex"):
+                        resolved = tnorm
+                if resolved is not None:
+                    return _pack(resolved, conds)
+                items = conds.get("items")
+                if isinstance(items, list) and len(items) > 0:
+                    return _pack("complex", conds)
+                cid = conds.get("item") if "item" in conds else None
+                if cid is None:
+                    cid = conds.get("condition_id")
+                if isinstance(cid, str) and cid.strip():
+                    return _pack("simple", {"item": cid.strip()})
+
+        cid_wrapped = meta.get("condition_ids")
+        if isinstance(cid_wrapped, dict):
+            cid = cid_wrapped.get("condition_id")
+            if isinstance(cid, str) and cid.strip():
+                return _pack("simple", {"item": cid.strip()})
+
+        # API-shaped ``conditions`` stored at metadata root (not under rule_engine).
+        top_conds = meta.get("conditions")
+        if isinstance(top_conds, dict):
+            items = top_conds.get("items")
+            if isinstance(items, list) and len(items) > 0:
+                mode = top_conds.get("mode")
+                if mode is not None and str(mode).strip():
+                    return _pack("complex", dict(top_conds))
+            cid = top_conds.get("item") if "item" in top_conds else None
+            if cid is None:
+                cid = top_conds.get("condition_id")
+            if cid is None and "0" in top_conds:
+                cid = top_conds.get("0")
+            if isinstance(cid, str) and cid.strip():
+                return _pack("simple", {"item": cid.strip()})
+
+        return None
+
     def _rule_to_dict(self, rule: Rule) -> Dict[str, Any]:
         """
         Convert Rule model to dictionary format expected by rule engine.
 
         If ``metadata.rule_engine`` is set (from API / management), returns the
         structured ``type`` + ``conditions`` shape used by ``rule_prepare`` so
-        complex rules execute correctly. Otherwise returns the legacy flat format.
+        complex rules execute correctly. If only ``metadata.condition_ids`` is
+        present (simple catalog reference), returns the same structured shape.
+        Otherwise returns the legacy flat format (attribute/condition/constant).
 
         Args:
             rule: Rule model instance
@@ -332,26 +612,9 @@ class DatabaseConfigRepository(ConfigRepository):
         Returns:
             Dictionary in rule engine format
         """
-        meta = rule.extra_metadata or {}
-        eng = meta.get("rule_engine")
-        if isinstance(eng, dict) and eng.get("type") in ("simple", "complex"):
-            conds = eng.get("conditions")
-            if isinstance(conds, dict):
-                return {
-                    "id": rule.rule_id,
-                    "rule_name": rule.rule_name,
-                    "rulename": rule.rule_name,
-                    "type": eng["type"],
-                    "conditions": conds,
-                    "description": rule.message or "",
-                    "message": rule.message,
-                    "rulepoint": float(rule.rule_point),
-                    "rule_point": rule.rule_point,
-                    "weight": rule.weight,
-                    "priority": rule.priority,
-                    "action_result": rule.action_result,
-                    "result": rule.action_result,
-                }
+        structured = self._structured_rule_dict_for_engine(rule)
+        if structured is not None:
+            return structured
 
         return {
             "id": rule.rule_id,

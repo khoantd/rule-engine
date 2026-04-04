@@ -12,9 +12,17 @@ from common.exceptions import (
     DataValidationError,
     ConfigurationError,
 )
-from common.repository.db_repository import RulesetRepository, RuleRepository
+from common.repository.db_repository import (
+    RulesetRepository,
+    RuleRepository,
+    default_actionset_placeholder_message,
+)
 from common.db_models import Ruleset, Pattern, Rule, RuleStatus
 from common.db_connection import get_db_session
+from services.rule_management import (
+    _assert_resolved_rule_executable,
+    _resolve_rule_conditions_for_db,
+)
 
 logger = get_logger(__name__)
 
@@ -431,7 +439,15 @@ class RuleSetManagementService:
                     error_code="RULESET_RULE_STRING_EMPTY",
                     context={"index": index},
                 )
-            return {"id": rid}
+            # Shorthand entries must still persist as executable rules (inline placeholder).
+            return {
+                "id": rid,
+                "conditions": {
+                    "attribute": "__ruleset_rule_stub__",
+                    "equation": "equal",
+                    "constant": '"__no_match__"',
+                },
+            }
         if isinstance(rule_data, dict):
             return rule_data
         raise DataValidationError(
@@ -471,7 +487,8 @@ class RuleSetManagementService:
             if pattern_key:
                 pattern_obj = Pattern(
                     pattern_key=pattern_key,
-                    action_recommendation=message or f"Action for {pattern_key}",
+                    action_recommendation=message
+                    or default_actionset_placeholder_message(pattern_key),
                     description=f"Actionset entry {pattern_key}",
                     ruleset_id=ruleset_id,
                 )
@@ -500,22 +517,24 @@ class RuleSetManagementService:
         """
         business_rule_id = self._coerce_business_rule_id(rule_data)
         conditions = rule_data.get("conditions", {})
+        if not isinstance(conditions, dict):
+            conditions = {}
 
-        # Handle conditions - could be inline or reference
-        if isinstance(conditions, dict):
-            attribute = conditions.get("attribute", "")
-            condition = conditions.get("equation", conditions.get("condition", "equal"))
-            constant = conditions.get("constant", "")
-        else:
-            attribute = ""
-            condition = "equal"
-            constant = ""
+        declared_type = rule_data.get("type")
+        base_meta = dict(rule_data.get("metadata") or {})
+        attribute, condition_op, constant, extra_metadata = _resolve_rule_conditions_for_db(
+            session,
+            conditions,
+            declared_type,
+            base_meta,
+        )
+        _assert_resolved_rule_executable(attribute, condition_op, constant, extra_metadata)
 
         rule = Rule(
             rule_id=business_rule_id,
             rule_name=rule_data.get("rule_name", ""),
             attribute=attribute,
-            condition=condition,
+            condition=condition_op,
             constant=str(constant),
             message=rule_data.get("description", ""),
             weight=float(rule_data.get("weight", 1.0)),
@@ -526,6 +545,7 @@ class RuleSetManagementService:
             version=rule_data.get("version", "1.0"),
             ruleset_id=ruleset_id,
             created_by=rule_data.get("created_by"),
+            extra_metadata=extra_metadata if extra_metadata else None,
         )
 
         session.add(rule)

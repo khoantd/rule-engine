@@ -146,6 +146,79 @@ def _resolve_rule_conditions_for_db(
     return "", "equal", "", merged
 
 
+def _metadata_has_executable_condition_refs(metadata: Dict[str, Any]) -> bool:
+    """True if metadata carries rule_engine or condition_ids that define how to evaluate."""
+    eng = metadata.get("rule_engine")
+    if isinstance(eng, dict):
+        conds = eng.get("conditions")
+        if isinstance(conds, dict):
+            items = conds.get("items")
+            if isinstance(items, list) and len(items) > 0:
+                return True
+            for key in ("item", "condition_id", "0"):
+                if key in conds:
+                    val = conds.get(key)
+                    if val is not None and str(val).strip():
+                        return True
+            attr = conds.get("attribute")
+            if attr is not None and str(attr).strip():
+                return True
+    cids = metadata.get("condition_ids")
+    if isinstance(cids, dict):
+        cid = cids.get("condition_id")
+        if isinstance(cid, str) and cid.strip():
+            return True
+    top = metadata.get("conditions")
+    if isinstance(top, dict):
+        items = top.get("items")
+        if isinstance(items, list) and len(items) > 0 and str(top.get("mode") or "").strip():
+            return True
+        for key in ("item", "condition_id", "0"):
+            if key in top:
+                val = top.get(key)
+                if val is not None and str(val).strip():
+                    return True
+        attr = top.get("attribute")
+        if attr is not None and str(attr).strip():
+            return True
+    return False
+
+
+def _assert_resolved_rule_executable(
+    attribute: str,
+    condition_op: str,
+    constant: str,
+    extra_metadata: Dict[str, Any],
+) -> None:
+    """
+    Reject persistence when the rule would load as a degenerate non-executable row.
+
+    Raises:
+        DataValidationError: If legacy columns are empty placeholders and metadata
+            does not define catalog or inline conditions.
+    """
+    meta = extra_metadata or {}
+    if _metadata_has_executable_condition_refs(meta):
+        return
+    attr_s = (attribute or "").strip()
+    const_s = (constant or "").strip() if constant is not None else ""
+    if attr_s or const_s:
+        return
+    op_s = (condition_op or "").strip() if condition_op is not None else ""
+    if op_s and op_s.lower() != "equal":
+        return
+    raise DataValidationError(
+        "Rule has no executable conditions. Provide a catalog reference (item / condition_id), "
+        "complex conditions.items and mode, or inline attribute / equation / constant.",
+        error_code="RULE_CONDITIONS_MISSING",
+        context={
+            "attribute": attribute,
+            "condition": condition_op,
+            "constant": constant,
+        },
+    )
+
+
 class RuleManagementService:
     """
     Service for managing Rules using database storage.
@@ -331,6 +404,8 @@ class RuleManagementService:
                     dict(rule_data.get("metadata") or {}),
                 )
 
+            _assert_resolved_rule_executable(attribute, condition_op, constant, extra_metadata)
+
             # Create rule in database
             rule = self.rule_repository.create_rule(
                 rule_id=rule_id,
@@ -400,10 +475,11 @@ class RuleManagementService:
                 update_kwargs["rule_name"] = rule_data["rule_name"]
             if "description" in rule_data:
                 update_kwargs["message"] = rule_data["description"]
-            if "result" in rule_data:
-                update_kwargs["action_result"] = rule_data["result"]
-            if "action_result" in rule_data:
-                update_kwargs["action_result"] = rule_data["action_result"]
+            if "action_result" in rule_data or "result" in rule_data:
+                if "action_result" in rule_data:
+                    update_kwargs["action_result"] = rule_data["action_result"]
+                else:
+                    update_kwargs["action_result"] = rule_data["result"]
             if "weight" in rule_data:
                 update_kwargs["weight"] = float(rule_data["weight"])
             if "rule_point" in rule_data:
@@ -442,6 +518,7 @@ class RuleManagementService:
                             rule_data.get("type"),
                             merged_meta,
                         )
+                    _assert_resolved_rule_executable(attribute, condition_op, constant, merged_meta)
                     update_kwargs["attribute"] = attribute
                     update_kwargs["condition"] = condition_op
                     update_kwargs["constant"] = str(constant)
