@@ -570,7 +570,10 @@ def get_config_repository() -> ConfigRepository:
             logger.info("Using database configuration repository")
             from common.repository.db_repository import DatabaseConfigRepository
 
-            _repository = DatabaseConfigRepository()
+            drn = (config.default_ruleset_name or "").strip()
+            _repository = DatabaseConfigRepository(
+                default_ruleset_name=drn if drn else None,
+            )
         elif config.s3_bucket:
             logger.info("Using S3 configuration repository", bucket=config.s3_bucket)
             _repository = S3ConfigRepository(bucket=config.s3_bucket)

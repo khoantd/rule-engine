@@ -197,7 +197,11 @@ async def execute_ruleset(
     status_code=status.HTTP_200_OK,
     summary="Execute rules against multiple data items",
     description=(
-        "Execute rules against multiple input data items in parallel for efficient batch processing."
+        "Execute rules against multiple input data items in parallel for efficient batch processing. "
+        "When the request omits ``rules``, definitions are loaded like ``POST /execute`` "
+        "(database when ``USE_DATABASE`` and a DB URL are configured, otherwise file/S3). "
+        "If ``USE_DATABASE`` is true, inline rules must not be required for DB loading: "
+        "a database URL and database-backed config repository are enforced."
     ),
 )
 async def execute_rules_batch(

@@ -88,6 +88,46 @@ def test_create_ruleset_accepts_string_rule_entries(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
+def test_create_ruleset_rejects_duplicate_rule_ids_in_rules_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same business rule id twice in one ruleset payload must be rejected."""
+    service = _install_memory_db_service(monkeypatch)
+    with pytest.raises(DataValidationError) as exc:
+        service.create_ruleset(
+            {
+                "ruleset_name": "rs_dup_rules",
+                "rules": [
+                    {
+                        "id": "R_DUP",
+                        "conditions": {"attribute": "k", "equation": "equal", "constant": '"a"'},
+                    },
+                    {
+                        "id": "R_DUP",
+                        "conditions": {"attribute": "k", "equation": "equal", "constant": '"b"'},
+                    },
+                ],
+            }
+        )
+    assert exc.value.error_code == "RULE_DUPLICATE_IN_RULESET"
+    assert "R_DUP" in str(exc.value)
+
+
+def test_create_ruleset_rejects_duplicate_string_rule_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Duplicate shorthand string rule ids in the list must be rejected."""
+    service = _install_memory_db_service(monkeypatch)
+    with pytest.raises(DataValidationError) as exc:
+        service.create_ruleset(
+            {
+                "ruleset_name": "rs_dup_str",
+                "rules": ["R1", "R1"],
+            }
+        )
+    assert exc.value.error_code == "RULE_DUPLICATE_IN_RULESET"
+
+
 def test_create_ruleset_rejects_rule_with_empty_conditions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

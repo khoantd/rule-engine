@@ -15,9 +15,33 @@ from common.exceptions import (
 from common.repository.db_repository import RuleRepository, RulesetRepository, ConditionRepository
 from common.db_models import Rule, RuleStatus, Condition
 from common.db_connection import get_db_session
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
+
+
+def _is_duplicate_ruleset_rule_id_error(exc: Exception) -> bool:
+    """
+    Return True if exc is a DB unique violation on (ruleset_id, rule_id).
+
+    Handles PostgreSQL (pgcode 23505), SQLite, and named constraint messages.
+    """
+    if not isinstance(exc, IntegrityError):
+        return False
+    parts = [str(exc).lower()]
+    orig = getattr(exc, "orig", None)
+    if orig is not None:
+        parts.append(str(orig).lower())
+        pgcode = getattr(orig, "pgcode", None)
+        if pgcode is not None and str(pgcode) == "23505":
+            return True
+    combined = " ".join(parts)
+    if "uq_rules_ruleset_rule_id" in combined:
+        return True
+    if "unique constraint failed" in combined and "rules" in combined:
+        return True
+    return False
 
 
 def _normalize_complex_mode(mode: Any) -> str:
@@ -406,24 +430,44 @@ class RuleManagementService:
 
             _assert_resolved_rule_executable(attribute, condition_op, constant, extra_metadata)
 
-            # Create rule in database
-            rule = self.rule_repository.create_rule(
-                rule_id=rule_id,
-                rule_name=rule_data.get("rule_name", ""),
-                attribute=attribute,
-                condition=condition_op,
-                constant=str(constant),
-                ruleset_id=ruleset_id,
-                message=rule_data.get("description", ""),
-                weight=float(rule_data.get("weight", 1.0)),
-                rule_point=int(rule_data.get("rule_point", 10)),
-                priority=int(rule_data.get("priority", 0)),
-                action_result=rule_data.get("result", rule_data.get("action_result", "Y")),
-                status=RuleStatus.ACTIVE.value,
-                version=rule_data.get("version", "1.0"),
-                created_by=rule_data.get("created_by"),
-                metadata=extra_metadata or None,
-            )
+            # Create rule in database (unique on ruleset_id + rule_id; race -> update)
+            try:
+                rule = self.rule_repository.create_rule(
+                    rule_id=rule_id,
+                    rule_name=rule_data.get("rule_name", ""),
+                    attribute=attribute,
+                    condition=condition_op,
+                    constant=str(constant),
+                    ruleset_id=ruleset_id,
+                    message=rule_data.get("description", ""),
+                    weight=float(rule_data.get("weight", 1.0)),
+                    rule_point=int(rule_data.get("rule_point", 10)),
+                    priority=int(rule_data.get("priority", 0)),
+                    action_result=rule_data.get("result", rule_data.get("action_result", "Y")),
+                    status=RuleStatus.ACTIVE.value,
+                    version=rule_data.get("version", "1.0"),
+                    created_by=rule_data.get("created_by"),
+                    metadata=extra_metadata or None,
+                )
+            except IntegrityError as ie:
+                if _is_duplicate_ruleset_rule_id_error(ie):
+                    logger.info(
+                        "Rule insert conflict for ruleset; applying update",
+                        rule_id=rule_id,
+                        ruleset_id=ruleset_id,
+                    )
+                    return self.update_rule(rule_id, rule_data)
+                logger.error(
+                    "Rule create failed with integrity error",
+                    rule_id=rule_id,
+                    error=str(ie),
+                    exc_info=True,
+                )
+                raise ConfigurationError(
+                    f"Failed to create rule: {str(ie)}",
+                    error_code="RULE_CREATE_ERROR",
+                    context={"rule_id": rule_id, "error": str(ie)},
+                ) from ie
 
             logger.info("Rule created successfully", rule_id=rule_id)
             return self._rule_to_dict(rule)

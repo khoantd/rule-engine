@@ -121,15 +121,18 @@ class DatabaseConfigRepository(ConfigRepository):
     interface as FileConfigRepository and S3ConfigRepository for easy switching.
     """
 
-    def __init__(self, default_ruleset_name: str = "default"):
+    def __init__(self, default_ruleset_name: Optional[str] = None):
         """
         Initialize database repository.
 
         Args:
-            default_ruleset_name: Name of default ruleset to use when no specific ruleset is provided
+            default_ruleset_name: Name of default ruleset when ``read_*`` is called with
+                ``None`` or when resolving by configured name. Empty or omitted uses
+                ``"default"``.
         """
-        self.default_ruleset_name = default_ruleset_name
-        logger.info("DatabaseConfigRepository initialized", default_ruleset=default_ruleset_name)
+        resolved = (default_ruleset_name or "default").strip() or "default"
+        self.default_ruleset_name = resolved
+        logger.info("DatabaseConfigRepository initialized", default_ruleset=resolved)
 
     def _get_ruleset_by_name(
         self, session: Session, ruleset_name: Optional[str] = None

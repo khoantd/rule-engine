@@ -6,7 +6,12 @@ import pytest
 from unittest.mock import MagicMock, patch, Mock
 from typing import Dict, Any
 
-from services.ruleengine_exec import validate_input_data, rules_exec, rules_exec_by_ruleset
+from services.ruleengine_exec import (
+    validate_input_data,
+    rules_exec,
+    rules_exec_by_ruleset,
+    rules_exec_batch,
+)
 from common.repository.db_repository import DatabaseConfigRepository
 from common.exceptions import (
     DataValidationError,
@@ -103,6 +108,37 @@ class TestRulesExec:
         """Test rules_exec with no rules returns default result."""
         mock_rules_cfg_read.return_value = []
         mock_rules_set_setup.return_value = []
+
+        result = rules_exec(sample_input_data)
+
+        assert result["total_points"] == 0.0
+        assert result["pattern_result"] == ""
+        assert result["action_recommendation"] is None
+
+    @patch("common.config.get_config")
+    @patch("services.ruleengine_exec.rules_set_setup")
+    @patch("services.ruleengine_exec.rules_set_cfg_read")
+    def test_rules_exec_skips_rules_when_input_missing_referenced_attributes(
+        self,
+        mock_rules_cfg_read,
+        mock_rules_set_setup,
+        mock_get_config,
+        sample_input_data,
+    ):
+        """Config-loaded execution skips rules whose attributes are not in data keys."""
+        mock_get_config.return_value = MagicMock(filter_rules_by_input_keys=True)
+        mock_rules_cfg_read.return_value = []
+        mock_rules_set_setup.return_value = [
+            {
+                "priority": 1,
+                "rule_name": "NeedsOtherField",
+                "condition": 'other == "x"',
+                "rule_point": 1.0,
+                "action_result": "X",
+                "weight": 1.0,
+                "referenced_attributes": ["other"],
+            }
+        ]
 
         result = rules_exec(sample_input_data)
 
@@ -511,3 +547,123 @@ class TestRulesExecByRuleset:
 
         warn_messages = [c.args[0] for c in mock_logger.warning.call_args_list if c.args]
         assert any("Prepared rule count differs from raw rules" in m for m in warn_messages)
+
+
+class TestRulesExecBatchDatabaseSource:
+    """Batch execution source checks when USE_DATABASE is enabled."""
+
+    @patch("services.ruleengine_exec.rules_exec")
+    @patch("services.ruleengine_exec.get_execution_history")
+    @patch("services.ruleengine_exec.get_metrics")
+    @patch("services.ruleengine_exec.get_config_repository")
+    @patch("services.ruleengine_exec.resolve_database_url_optional")
+    @patch("services.ruleengine_exec.get_config")
+    def test_batch_skips_db_check_when_inline_rules_provided(
+        self,
+        mock_get_config,
+        mock_resolve_url,
+        mock_get_repo,
+        mock_get_metrics,
+        mock_get_history,
+        mock_rules_exec,
+    ):
+        """Inline ``rules`` bypasses database configuration enforcement."""
+        mock_get_config.return_value = MagicMock(use_database=True)
+        mock_rules_exec.return_value = {
+            "total_points": 0.0,
+            "pattern_result": "",
+            "action_recommendation": None,
+        }
+        mock_get_metrics.return_value = MagicMock()
+        mock_get_history.return_value = MagicMock()
+
+        rules_exec_batch([{}], rules=[{"rulename": "x"}])
+
+        mock_resolve_url.assert_not_called()
+        mock_get_repo.assert_not_called()
+
+    @patch("services.ruleengine_exec.get_config_repository")
+    @patch("services.ruleengine_exec.resolve_database_url_optional")
+    @patch("services.ruleengine_exec.get_config")
+    def test_batch_raises_when_use_database_without_url(
+        self,
+        mock_get_config,
+        mock_resolve_url,
+        mock_get_repo,
+    ):
+        """USE_DATABASE without a resolvable URL cannot load rules from DB."""
+        mock_get_config.return_value = MagicMock(
+            use_database=True,
+            database_url=None,
+            database_env_file=None,
+            default_ruleset_name=None,
+        )
+        mock_resolve_url.return_value = None
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            rules_exec_batch([{}], rules=None)
+
+        assert exc_info.value.error_code == "BATCH_REQUIRES_DATABASE_URL"
+        mock_get_repo.assert_not_called()
+
+    @patch("services.ruleengine_exec.rules_exec")
+    @patch("services.ruleengine_exec.get_execution_history")
+    @patch("services.ruleengine_exec.get_metrics")
+    @patch("services.ruleengine_exec.get_config_repository")
+    @patch("services.ruleengine_exec.resolve_database_url_optional")
+    @patch("services.ruleengine_exec.get_config")
+    def test_batch_succeeds_when_use_database_and_database_repository(
+        self,
+        mock_get_config,
+        mock_resolve_url,
+        mock_get_repo,
+        mock_get_metrics,
+        mock_get_history,
+        mock_rules_exec,
+    ):
+        """Batch proceeds when DB mode is on and repository is database-backed."""
+        mock_get_config.return_value = MagicMock(
+            use_database=True,
+            database_url="postgresql://u:p@h/db",
+            database_env_file=None,
+            default_ruleset_name="main",
+        )
+        mock_resolve_url.return_value = None
+        mock_get_repo.return_value = DatabaseConfigRepository()
+        mock_rules_exec.return_value = {
+            "total_points": 1.0,
+            "pattern_result": "A",
+            "action_recommendation": None,
+        }
+        mock_get_metrics.return_value = MagicMock()
+        mock_get_history.return_value = MagicMock()
+
+        out = rules_exec_batch([{"k": 1}], rules=None)
+
+        assert out["summary"]["total_executions"] == 1
+        assert out["summary"]["successful_executions"] == 1
+        mock_rules_exec.assert_called_once()
+
+    @patch("services.ruleengine_exec.get_config_repository")
+    @patch("services.ruleengine_exec.resolve_database_url_optional")
+    @patch("services.ruleengine_exec.get_config")
+    def test_batch_raises_when_use_database_but_repository_not_database(
+        self,
+        mock_get_config,
+        mock_resolve_url,
+        mock_get_repo,
+    ):
+        """USE_DATABASE with a URL but a non-DB repository is a hard error."""
+        mock_get_config.return_value = MagicMock(
+            use_database=True,
+            database_url="postgresql://u:p@h/db",
+            database_env_file=None,
+            default_ruleset_name=None,
+        )
+        mock_resolve_url.return_value = None
+        mock_get_repo.return_value = MagicMock()
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            rules_exec_batch([{}], rules=None)
+
+        assert exc_info.value.error_code == "BATCH_REPOSITORY_NOT_DATABASE"

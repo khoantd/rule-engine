@@ -5,7 +5,7 @@ This module provides services for managing RuleSets, including CRUD operations
 using database storage.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from common.logger import get_logger
 from common.exceptions import (
@@ -460,10 +460,18 @@ class RuleSetManagementService:
         self, session, ruleset_id: int, rules: List[Union[str, Dict[str, Any]]]
     ) -> None:
         """Create rules from a list of string ids and/or rule dicts."""
+        seen_rule_ids: Set[str] = set()
         for idx, item in enumerate(rules):
-            self._create_rule_from_dict(
-                session, self._normalize_rule_list_item(item, idx), ruleset_id
-            )
+            normalized = self._normalize_rule_list_item(item, idx)
+            business_id = self._coerce_business_rule_id(normalized)
+            if business_id in seen_rule_ids:
+                raise DataValidationError(
+                    f"Duplicate rule id '{business_id}' in rules list for this ruleset",
+                    error_code="RULE_DUPLICATE_IN_RULESET",
+                    context={"rule_id": business_id, "index": idx},
+                )
+            seen_rule_ids.add(business_id)
+            self._create_rule_from_dict(session, normalized, ruleset_id)
 
     def _replace_rules_for_ruleset(
         self, session, ruleset: Ruleset, rules: List[Union[str, Dict[str, Any]]]

@@ -244,12 +244,82 @@
 								"batch"
 							]
 						},
-						"description": "Execute rules against multiple input data items in parallel for efficient batch processing."
+						"description": "POST /api/v1/rules/batch. Evaluates each object in data_list in parallel (optional max_workers). Omit rules to load rule definitions the same way as POST /execute (database when USE_DATABASE and a DB URL are configured; otherwise file/S3). Optional rules uses the same shape as POST /execute and is applied to every item. Response: batch_id, results (per-item status, points, pattern, errors), summary (counts, timing), dry_run."
+					},
+					"response": []
+				},
+				{
+					"name": "Batch Execute Rules (Dry Run)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data_list\": [\n    {\n      \"issue\": 35,\n      \"title\": \"Superman\",\n      \"publisher\": \"DC\"\n    },\n    {\n      \"issue\": 10,\n      \"title\": \"Batman\",\n      \"publisher\": \"DC\"\n    }\n  ],\n  \"dry_run\": true,\n  \"max_workers\": 4,\n  \"correlation_id\": \"batch-dry-run-001\",\n  \"consumer_id\": null\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"batch"
+							]
+						},
+						"description": "Same as Batch Execute Rules with dry_run true so each item returns detailed evaluations (would_match / would_not_match where applicable) without side effects."
+					},
+					"response": []
+				},
+				{
+					"name": "Batch Execute Rules (Inline Rules Override)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data_list\": [\n    {\n      \"issue\": 35,\n      \"title\": \"Superman\",\n      \"publisher\": \"DC\"\n    },\n    {\n      \"issue\": 10,\n      \"title\": \"Batman\",\n      \"publisher\": \"DC\"\n    }\n  ],\n  \"dry_run\": false,\n  \"max_workers\": 2,\n  \"correlation_id\": \"batch-inline-001\",\n  \"consumer_id\": null,\n  \"rules\": [\n    {\n      \"rulename\": \"inline-complex\",\n      \"type\": \"complex\",\n      \"priority\": 1,\n      \"conditions\": {\n        \"items\": [\n          {\n            \"attribute\": \"issue\",\n            \"equation\": \"greater_than\",\n            \"constant\": \"30\"\n          },\n          {\n            \"attribute\": \"publisher\",\n            \"equation\": \"equal\",\n            \"constant\": \"DC\"\n          }\n        ],\n        \"mode\": \"and\"\n      },\n      \"rulepoint\": 10.0,\n      \"weight\": 1.0,\n      \"action_result\": \"MATCH\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"batch"
+							]
+						},
+						"description": "Batch with optional rules array (same schema as POST /execute). Skips loading rules from DB/file/S3 for each item. When USE_DATABASE is true, the server still expects a valid DB-backed config path unless your deployment documents otherwise; use this mainly for tests or explicit inline evaluation."
 					},
 					"response": []
 				}
 			],
-			"description": "Rule execution endpoints for single and batch operations"
+			"description": "Rule execution: single execute, ruleset execute, and batch (default config, dry run, or inline rules override)"
 		},
 		{
 			"name": "DMN Rules Execution",

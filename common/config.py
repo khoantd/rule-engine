@@ -13,6 +13,7 @@ import os
 # Load .env early so USE_DATABASE, TIMESCALE_SERVICE_URL, DATABASE_URL are available
 try:
     from dotenv import load_dotenv, find_dotenv
+
     load_dotenv(find_dotenv())
 except ImportError:
     pass
@@ -38,9 +39,7 @@ class Config:
 
     # File paths
     rules_config_path: str = field(
-        default_factory=lambda: os.getenv(
-            "RULES_CONFIG_PATH", "data/input/rules_config_v4.json"
-        )
+        default_factory=lambda: os.getenv("RULES_CONFIG_PATH", "data/input/rules_config_v4.json")
     )
     conditions_config_path: str = field(
         default_factory=lambda: os.getenv(
@@ -48,26 +47,32 @@ class Config:
         )
     )
 
+    # When using DatabaseConfigRepository, rules / patterns load from this ruleset name.
+    # Env wins over config.ini; see [RULE] default_ruleset_name in config file.
+    default_ruleset_name: Optional[str] = field(
+        default_factory=lambda: (os.getenv("DEFAULT_RULESET_NAME") or "").strip() or None
+    )
+
+    # When True (default), rules_exec loads from config/ruleset only rules whose condition
+    # attributes are all present as top-level keys in input data. Set RULE_ENGINE_FILTER_RULES_BY_INPUT_KEYS=false to disable.
+    filter_rules_by_input_keys: bool = field(
+        default_factory=lambda: os.getenv("RULE_ENGINE_FILTER_RULES_BY_INPUT_KEYS", "true").lower()
+        not in ("0", "false", "no")
+    )
+
     # AWS Configuration
-    aws_region: str = field(
-        default_factory=lambda: os.getenv("AWS_REGION", "us-east-1")
-    )
+    aws_region: str = field(default_factory=lambda: os.getenv("AWS_REGION", "us-east-1"))
     s3_bucket: Optional[str] = field(default_factory=lambda: os.getenv("S3_BUCKET"))
-    s3_config_prefix: str = field(
-        default_factory=lambda: os.getenv("S3_CONFIG_PREFIX", "config/")
-    )
+    s3_config_prefix: str = field(default_factory=lambda: os.getenv("S3_CONFIG_PREFIX", "config/"))
 
     # Database Configuration
     use_database: bool = field(
         default_factory=lambda: os.getenv("USE_DATABASE", "false").lower() == "true"
     )
     database_url: Optional[str] = field(
-        default_factory=lambda: os.getenv("TIMESCALE_SERVICE_URL")
-        or os.getenv("DATABASE_URL")
+        default_factory=lambda: os.getenv("TIMESCALE_SERVICE_URL") or os.getenv("DATABASE_URL")
     )
-    database_env_file: Optional[str] = field(
-        default_factory=lambda: os.getenv("DATABASE_ENV_FILE")
-    )
+    database_env_file: Optional[str] = field(default_factory=lambda: os.getenv("DATABASE_ENV_FILE"))
 
     # Logging
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
@@ -75,18 +80,12 @@ class Config:
     # JIRA Configuration (if needed)
     # Note: Secrets should be loaded from AWS SSM or Secrets Manager in production
     jira_url: Optional[str] = field(default_factory=lambda: os.getenv("JIRA_URL"))
-    jira_username: Optional[str] = field(
-        default_factory=lambda: os.getenv("JIRA_USERNAME")
-    )
+    jira_username: Optional[str] = field(default_factory=lambda: os.getenv("JIRA_USERNAME"))
     jira_token: Optional[str] = field(default_factory=lambda: os.getenv("JIRA_TOKEN"))
 
     # AWS Systems Manager Parameter Store (for secrets)
-    use_ssm: bool = field(
-        default_factory=lambda: os.getenv("USE_SSM", "false").lower() == "true"
-    )
-    ssm_prefix: str = field(
-        default_factory=lambda: os.getenv("SSM_PREFIX", "/rule-engine/")
-    )
+    use_ssm: bool = field(default_factory=lambda: os.getenv("USE_SSM", "false").lower() == "true")
+    ssm_prefix: str = field(default_factory=lambda: os.getenv("SSM_PREFIX", "/rule-engine/"))
 
     # Performance
     cache_ttl: int = field(default_factory=lambda: int(os.getenv("CACHE_TTL", "3600")))
@@ -125,9 +124,7 @@ class Config:
         config = cls()
 
         if not os.path.exists(config_file):
-            logger.warning(
-                f"Config file {config_file} not found, using environment defaults"
-            )
+            logger.warning(f"Config file {config_file} not found, using environment defaults")
             return config
 
         parser = configparser.ConfigParser()
@@ -136,23 +133,17 @@ class Config:
         # Load JIRA config from file if present
         if "JIRA" in parser:
             config.jira_url = parser.get("JIRA", "url", fallback=config.jira_url)
-            config.jira_username = parser.get(
-                "JIRA", "username", fallback=config.jira_username
-            )
+            config.jira_username = parser.get("JIRA", "username", fallback=config.jira_username)
 
             # Try to load token from secrets manager first, fallback to file
             try:
                 secrets_manager = get_secrets_manager()
-                config.jira_token = secrets_manager.get_secret(
-                    "jira_token", required=False
-                )
+                config.jira_token = secrets_manager.get_secret("jira_token", required=False)
                 if config.jira_token:
                     logger.info("JIRA token loaded from secrets manager")
                 else:
                     # Fallback to file if not in secrets manager
-                    config.jira_token = parser.get(
-                        "JIRA", "token", fallback=config.jira_token
-                    )
+                    config.jira_token = parser.get("JIRA", "token", fallback=config.jira_token)
                     if config.jira_token:
                         logger.warning(
                             "JIRA token loaded from config file. "
@@ -161,18 +152,29 @@ class Config:
                         )
             except Exception as e:
                 # If secrets manager fails, fallback to file
-                logger.warning(
-                    "Secrets manager not available, using config file", error=str(e)
-                )
-                config.jira_token = parser.get(
-                    "JIRA", "token", fallback=config.jira_token
-                )
+                logger.warning("Secrets manager not available, using config file", error=str(e))
+                config.jira_token = parser.get("JIRA", "token", fallback=config.jira_token)
 
         # Load RULE config from file if present
         if "RULE" in parser:
             config.rules_config_path = parser.get(
                 "RULE", "file_name", fallback=config.rules_config_path
             )
+            # DB repository: optional explicit ruleset (ignored when DEFAULT_RULESET_NAME is set)
+            if not os.getenv("DEFAULT_RULESET_NAME"):
+                ini_rs = parser.get("RULE", "default_ruleset_name", fallback="").strip()
+                if not ini_rs:
+                    ini_rs = parser.get("RULE", "ruleset_name", fallback="").strip()
+                if ini_rs:
+                    config.default_ruleset_name = ini_rs
+            if not os.getenv("RULE_ENGINE_FILTER_RULES_BY_INPUT_KEYS"):
+                if "filter_rules_by_input_keys" in parser["RULE"]:
+                    val = parser.get("RULE", "filter_rules_by_input_keys", fallback="true")
+                    config.filter_rules_by_input_keys = str(val).strip().lower() not in (
+                        "0",
+                        "false",
+                        "no",
+                    )
 
         # Load CONDITIONS config from file if present
         if "CONDITIONS" in parser:
@@ -219,9 +221,7 @@ class Config:
 
             conditions_path = Path(self.conditions_config_path)
             if not conditions_path.exists():
-                errors.append(
-                    f"Conditions config file not found: {self.conditions_config_path}"
-                )
+                errors.append(f"Conditions config file not found: {self.conditions_config_path}")
 
         # Validate log level
         valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -289,9 +289,7 @@ def get_config() -> Config:
         try:
             _config = Config.from_file()
         except Exception as e:
-            logger.warning(
-                f"Failed to load config from file: {e}, using environment defaults"
-            )
+            logger.warning(f"Failed to load config from file: {e}, using environment defaults")
             _config = Config.from_env()
 
         # Validate configuration

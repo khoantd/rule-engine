@@ -59,9 +59,30 @@ def test_format_contains_empty_attribute_raises() -> None:
 
 
 @pytest.mark.unit
-def test_format_equal_unchanged() -> None:
+def test_format_equal_quotes_string_constant() -> None:
+    # API passes bare string "open"; _rule_engine_string_operand must wrap it in quotes
+    # so the rule engine treats it as a string literal, not a symbol reference.
+    text = format_rule_engine_condition_clause("status", "equal", "open", rule_name="r")
+    assert text == 'status == "open"'
+
+
+@pytest.mark.unit
+def test_format_equal_already_quoted_constant_passthrough() -> None:
+    # If the caller already quotes the constant (e.g. from legacy storage), it passes through.
     text = format_rule_engine_condition_clause("status", "equal", '"open"', rule_name="r")
     assert text == 'status == "open"'
+
+
+@pytest.mark.unit
+def test_format_greater_than_numeric_constant() -> None:
+    text = format_rule_engine_condition_clause("issue", "greater_than", "30", rule_name="r")
+    assert text == "issue > 30"
+
+
+@pytest.mark.unit
+def test_format_less_than_numeric_constant() -> None:
+    text = format_rule_engine_condition_clause("score", "less_than", "100", rule_name="r")
+    assert text == "score < 100"
 
 
 @pytest.mark.unit

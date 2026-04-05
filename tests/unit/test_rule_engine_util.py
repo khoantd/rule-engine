@@ -6,6 +6,7 @@ import pytest
 from unittest.mock import MagicMock, patch, Mock
 from typing import Dict, Any, List
 
+import common.rule_engine_util as rule_engine_util_mod
 from common.rule_engine_util import (
     rule_run,
     rule_prepare,
@@ -20,15 +21,22 @@ from domain.conditions.condition_obj import Condition
 from domain.rules.rule_obj import ExtRule
 
 
+def _patch_rule_engine_errors(mock_re: MagicMock) -> None:
+    """``rule_run`` catches ``rule_engine.errors.SymbolResolutionError``; mocks need a real BaseException."""
+    mock_re.errors = MagicMock()
+    mock_re.errors.SymbolResolutionError = type("SymbolResolutionError", (Exception,), {})
+
+
 class TestRuleRun:
     """Tests for rule_run function."""
 
-    @patch("common.rule_engine_util.rule_engine.Rule")
-    def test_rule_run_success(self, mock_rule_class, sample_prepared_rule, sample_input_data):
+    @patch.object(rule_engine_util_mod, "rule_engine")
+    def test_rule_run_success(self, mock_re, sample_prepared_rule, sample_input_data):
         """Test successful rule execution."""
+        _patch_rule_engine_errors(mock_re)
         mock_rule = MagicMock()
         mock_rule.matches.return_value = True
-        mock_rule_class.return_value = mock_rule
+        mock_re.Rule.return_value = mock_rule
 
         result = rule_run(sample_prepared_rule, sample_input_data)
 
@@ -37,12 +45,13 @@ class TestRuleRun:
         assert result["weight"] == 1.0
         mock_rule.matches.assert_called_once_with(sample_input_data)
 
-    @patch("common.rule_engine_util.rule_engine.Rule")
-    def test_rule_run_no_match(self, mock_rule_class, sample_prepared_rule, sample_input_data):
+    @patch.object(rule_engine_util_mod, "rule_engine")
+    def test_rule_run_no_match(self, mock_re, sample_prepared_rule, sample_input_data):
         """Test rule execution when rule doesn't match."""
+        _patch_rule_engine_errors(mock_re)
         mock_rule = MagicMock()
         mock_rule.matches.return_value = False
-        mock_rule_class.return_value = mock_rule
+        mock_re.Rule.return_value = mock_rule
 
         result = rule_run(sample_prepared_rule, sample_input_data)
 
@@ -50,12 +59,11 @@ class TestRuleRun:
         assert result["rule_point"] == 0.0
         assert result["weight"] == 0.0
 
-    @patch("common.rule_engine_util.rule_engine.Rule")
-    def test_rule_run_rule_error(self, mock_rule_class, sample_prepared_rule, sample_input_data):
+    @patch.object(rule_engine_util_mod, "rule_engine")
+    def test_rule_run_rule_error(self, mock_re, sample_prepared_rule, sample_input_data):
         """Test rule execution handles rule engine errors gracefully."""
-        import rule_engine.errors
-
-        mock_rule_class.side_effect = rule_engine.errors.RuleError("Rule error")
+        _patch_rule_engine_errors(mock_re)
+        mock_re.Rule.side_effect = ValueError("Rule error")
 
         result = rule_run(sample_prepared_rule, sample_input_data)
 
@@ -63,10 +71,11 @@ class TestRuleRun:
         assert result["action_result"] == "-"
         assert result["rule_point"] == 0.0
 
-    @patch("common.rule_engine_util.rule_engine.Rule")
-    def test_rule_run_general_error(self, mock_rule_class, sample_prepared_rule, sample_input_data):
+    @patch.object(rule_engine_util_mod, "rule_engine")
+    def test_rule_run_general_error(self, mock_re, sample_prepared_rule, sample_input_data):
         """Test rule execution handles general errors gracefully."""
-        mock_rule_class.side_effect = Exception("General error")
+        _patch_rule_engine_errors(mock_re)
+        mock_re.Rule.side_effect = Exception("General error")
 
         result = rule_run(sample_prepared_rule, sample_input_data)
 
@@ -98,6 +107,7 @@ class TestRulePrepare:
         assert result["rule_point"] == 10.0
         assert result["action_result"] == "A"
         assert result["weight"] == 1.0
+        assert result["referenced_attributes"] == ["status"]
 
     def test_rule_prepare_complex_rule(self, sample_condition_objects):
         """Test preparing a complex rule."""
@@ -117,6 +127,7 @@ class TestRulePrepare:
         assert result["priority"] == 1
         assert "and" in result["condition"].lower()  # Should contain logical operator
         assert result["rule_point"] == 10.0
+        assert result["referenced_attributes"] == ["priority", "status"]
 
     def test_rule_prepare_ext_rule(self, sample_condition_objects, sample_ext_rule):
         """Test preparing an ExtRule object."""
@@ -124,6 +135,7 @@ class TestRulePrepare:
 
         assert result["rule_name"] == "Rule1"
         assert result["priority"] == 1
+        assert result["referenced_attributes"] == ["status"]
 
     def test_rule_prepare_empty_rule(self, sample_condition_objects):
         """Test preparing empty rule raises RuleCompilationError."""
@@ -414,7 +426,7 @@ class TestRulesSetSetup:
         # Should be sorted by priority
         assert len(result) == 2
         assert result[0]["priority"] == 1  # Lower priority first
-        mock_cache.set.assert_called_once()
+        assert mock_cache.set.call_count == 2  # content-hash key + sentinel key
 
     @patch("common.rule_engine_util.get_file_cache")
     def test_rules_set_setup_cached(self, mock_get_cache):

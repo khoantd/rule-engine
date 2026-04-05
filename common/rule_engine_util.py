@@ -2,7 +2,7 @@ import configparser
 import json
 import re
 import rule_engine
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 from common.json_util import read_json_file
 from common.json_util import parse_json_v2
 from common.s3_aws_util import config_file_read
@@ -15,6 +15,9 @@ from common.exceptions import ConfigurationError, RuleEvaluationError, RuleCompi
 from common.cache import memoize_with_cache, lru_cache_with_ttl, get_file_cache
 
 logger = get_logger(__name__)
+
+# Pre-compiled regex for FEEL string join expressions — avoids recompilation on every call
+_FEEL_JOIN_PATTERN = re.compile(r"string\s+join\s*\(([^)]+)\)", re.IGNORECASE)
 
 
 def rules_set_cfg_read() -> List[Dict[str, Any]]:
@@ -124,11 +127,20 @@ def rules_set_setup(rules_set: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         >>> len(prepared)
         1
     """
-    # Check cache first using hash of rules set
-    cache = get_file_cache()
-    # Generate stable cache key from rules set content
     import hashlib
 
+    cache = get_file_cache()
+
+    # Fast path: use a cheap sentinel key to check if this exact rules_set object is cached.
+    # Only compute the expensive MD5 when the sentinel misses (i.e. on first call or after
+    # a config reload), so repeated calls with the same config pay near-zero overhead.
+    sentinel_key = f"rules_setup_id_{id(rules_set)}"
+    cached_result = cache.get(sentinel_key)
+    if cached_result is not None:
+        logger.debug("Using cached rules setup (sentinel hit)")
+        return cached_result
+
+    # Sentinel missed — compute a stable content-hash for cross-process / reloaded configs
     rules_hash = hashlib.md5(
         json.dumps(
             [{k: v for k, v in sorted(r.items())} for r in rules_set], sort_keys=True
@@ -138,7 +150,7 @@ def rules_set_setup(rules_set: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     cached_result = cache.get(cache_key)
     if cached_result is not None:
-        logger.debug("Using cached rules setup")
+        logger.debug("Using cached rules setup (content-hash hit)")
         return cached_result
 
     # Load conditions and prepare rules
@@ -148,13 +160,15 @@ def rules_set_setup(rules_set: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     # Sort rules by priority once (cache sorted result)
     rule_exec_result_list = sorted(rule_exec_result_list, key=sort_by_priority)
 
-    # Cache the result (get file paths for change detection)
+    # Cache the result under both keys (file paths enable invalidation on config change)
     try:
         conditions_file = cfg_read("CONDITIONS", "file_name")
         cache.set(cache_key, rule_exec_result_list, file_paths=[conditions_file])
+        cache.set(sentinel_key, rule_exec_result_list, file_paths=[conditions_file])
     except Exception:
         # Fallback if config read fails
         cache.set(cache_key, rule_exec_result_list)
+        cache.set(sentinel_key, rule_exec_result_list)
 
     logger.debug("Rules setup completed and cached", rules_count=len(rule_exec_result_list))
     return rule_exec_result_list
@@ -186,9 +200,11 @@ def rules_set_exec(
     """
     rules_list = rules_set
     prepared_rules_list = []
+    # Build O(1) lookup index once for all rules instead of O(n) scan per rule
+    conditions_index: Dict[str, Condition] = {cond.condition_id: cond for cond in conditionss_set}
     for rule in rules_list:
         try:
-            prepared_rules_list.append(rule_prepare(conditionss_set, rule))
+            prepared_rules_list.append(rule_prepare(conditions_index, rule))
         except RuleCompilationError as e:
             # Skip rules with empty attribute/condition (e.g. invalid flat rules from DB/file)
             if getattr(e, "error_code", None) == "CONDITION_EMPTY":
@@ -463,7 +479,8 @@ def _rule_dict_to_extrule_kwargs(
 
 
 def rule_prepare(
-    conditionss_set: List[Condition], rule: Union[Dict[str, Any], ExtRule]
+    conditionss_set: Union[List[Condition], Dict[str, Condition]],
+    rule: Union[Dict[str, Any], ExtRule],
 ) -> Dict[str, Any]:
     """
     Prepare a rule for execution by constructing its condition string.
@@ -492,6 +509,7 @@ def rule_prepare(
             - rule_point: Point value awarded if rule matches (float)
             - action_result: Action string returned if rule matches (str)
             - weight: Weight multiplier for rule points (float)
+            - referenced_attributes: Catalog / inline attribute names used in the rule (List[str])
 
     Raises:
         RuleCompilationError: If rule cannot be prepared due to:
@@ -517,6 +535,16 @@ def rule_prepare(
     )
     logger.debug("Preparing rule for execution", rule_name=rule_name)
 
+    # Build O(1) lookup index. Accept both list (external callers) and pre-built dict.
+    if isinstance(conditionss_set, list):
+        conditions_index: Dict[str, Condition] = {
+            cond.condition_id: cond for cond in conditionss_set
+        }
+        _conditions_list = conditionss_set
+    else:
+        conditions_index = conditionss_set
+        _conditions_list = list(conditionss_set.values())
+
     try:
         # Validate rule structure
         if not rule:
@@ -530,7 +558,7 @@ def rule_prepare(
         # Convert rule to ExtRule if needed
         if isinstance(rule, dict):
             try:
-                kwargs = _rule_dict_to_extrule_kwargs(conditionss_set, rule)
+                kwargs = _rule_dict_to_extrule_kwargs(_conditions_list, rule)
                 tmp_rule = ExtRule(**kwargs)
             except RuleCompilationError:
                 raise
@@ -550,6 +578,7 @@ def rule_prepare(
         tmp_cond_concated_str = ""
         tmp_logical_operator = ""
         tmp_cond_ls = []
+        referenced_attrs: Set[str] = set()
 
         # Validate rule type
         if tmp_rule.type not in ["complex", "simple"]:
@@ -611,6 +640,8 @@ def rule_prepare(
                     attr = entry.get("attribute")
                     equation = entry.get("equation", entry.get("condition"))
                     constant = entry.get("constant")
+                    if attr is not None and str(attr).strip():
+                        referenced_attrs.add(str(attr).strip())
                     tmp_str = format_rule_engine_condition_clause(
                         "" if attr is None else str(attr),
                         "" if equation is None else str(equation),
@@ -645,23 +676,25 @@ def rule_prepare(
                 condition_id = entry
                 condition_found = False
 
-                for cond in conditionss_set:
-                    if cond.condition_id == condition_id:
-                        condition_found = True
-                        tmp_str = format_rule_engine_condition_clause(
-                            cond.attribute,
-                            cond.equation,
-                            cond.constant,
-                            rule_name=rule_name,
-                        )
-                        tmp_cond_ls.append(tmp_str)
-                        logger.debug(
-                            "Condition found and added",
-                            rule_name=rule_name,
-                            condition_id=condition_id,
-                            condition_str=tmp_str,
-                        )
-                        break
+                cond = conditions_index.get(condition_id)
+                if cond is not None:
+                    condition_found = True
+                    ca = getattr(cond, "attribute", None)
+                    if ca is not None and str(ca).strip():
+                        referenced_attrs.add(str(ca).strip())
+                    tmp_str = format_rule_engine_condition_clause(
+                        cond.attribute,
+                        cond.equation,
+                        cond.constant,
+                        rule_name=rule_name,
+                    )
+                    tmp_cond_ls.append(tmp_str)
+                    logger.debug(
+                        "Condition found and added",
+                        rule_name=rule_name,
+                        condition_id=condition_id,
+                        condition_str=tmp_str,
+                    )
 
                 if not condition_found:
                     logger.warning(
@@ -755,22 +788,24 @@ def rule_prepare(
             condition_found = False
             tmp_str = ""
 
-            for cond in conditionss_set:
-                if cond.condition_id == tmp_condition:
-                    condition_found = True
-                    tmp_str = format_rule_engine_condition_clause(
-                        cond.attribute,
-                        cond.equation,
-                        cond.constant,
-                        rule_name=rule_name,
-                    )
-                    logger.debug(
-                        "Condition found for simple rule",
-                        rule_name=rule_name,
-                        condition_id=tmp_condition,
-                        condition_str=tmp_str,
-                    )
-                    break
+            cond = conditions_index.get(tmp_condition)
+            if cond is not None:
+                condition_found = True
+                ca = getattr(cond, "attribute", None)
+                if ca is not None and str(ca).strip():
+                    referenced_attrs.add(str(ca).strip())
+                tmp_str = format_rule_engine_condition_clause(
+                    cond.attribute,
+                    cond.equation,
+                    cond.constant,
+                    rule_name=rule_name,
+                )
+                logger.debug(
+                    "Condition found for simple rule",
+                    rule_name=rule_name,
+                    condition_id=tmp_condition,
+                    condition_str=tmp_str,
+                )
 
             if not condition_found:
                 logger.error(
@@ -795,14 +830,27 @@ def rule_prepare(
                 condition_str=tmp_cond_concated_str,
             )
 
+        # Pre-compile the rule engine rule once so rule_run() avoids recompiling per record
+        try:
+            compiled_rule = rule_engine.Rule(tmp_cond_concated_str)
+        except Exception as compile_error:
+            logger.warning(
+                "Could not pre-compile rule; will compile on first evaluation",
+                rule_name=rule_name,
+                error=str(compile_error),
+            )
+            compiled_rule = None
+
         # Build rule execution result
         rule_exec_result = {
             "priority": tmp_rule.priority,
             "rule_name": tmp_rule.rulename,
             "condition": tmp_cond_concated_str,
+            "compiled_rule": compiled_rule,
             "rule_point": tmp_rule.rulepoint,
             "action_result": tmp_rule.action_result,
             "weight": tmp_rule.weight,
+            "referenced_attributes": sorted(referenced_attrs),
         }
 
         logger.debug(
@@ -825,6 +873,52 @@ def rule_prepare(
             error_code="RULE_PREPARE_ERROR",
             context={"rule_name": rule_name, "error": str(error)},
         ) from error
+
+
+def filter_prepared_rules_by_input_data_keys(
+    prepared_rules: List[Any],
+    data: Dict[str, Any],
+) -> List[Any]:
+    """
+    Restrict prepared rules to those whose conditions only use top-level ``data`` keys.
+
+    Each prepared rule should include ``referenced_attributes`` from :func:`rule_prepare`.
+    Rules with missing or empty ``referenced_attributes`` are kept for backward
+    compatibility.
+
+    If ``data`` has no keys, returns ``prepared_rules`` unchanged (empty payloads are not
+    filtered). If :attr:`Config.filter_rules_by_input_keys` is False, returns the input
+    list unchanged.
+
+    Args:
+        prepared_rules: Output of :func:`rules_set_exec` / :func:`rules_set_setup`.
+        data: Validated input payload (same keys the rule engine reads).
+
+    Returns:
+        Filtered list (may be shorter than ``prepared_rules``).
+    """
+    from common.config import get_config
+
+    if not get_config().filter_rules_by_input_keys:
+        return prepared_rules
+    if not prepared_rules:
+        return prepared_rules
+    top_keys = set(data.keys())
+    if not top_keys:
+        return prepared_rules
+
+    out: List[Any] = []
+    for rule in prepared_rules:
+        if not isinstance(rule, dict):
+            out.append(rule)
+            continue
+        ref = rule.get("referenced_attributes")
+        if not ref:
+            out.append(rule)
+            continue
+        if all(attr in data for attr in ref):
+            out.append(rule)
+    return out
 
 
 def conditions_set_load() -> List[Condition]:
@@ -1009,9 +1103,10 @@ def format_rule_engine_condition_clause(
                 "constant": constant,
             },
         )
-    # Regex RHS must be a string literal; unquoted ^ is parsed as bitwise XOR (BWXOR).
-    if op in ("=~", "=~~", "!~", "!~~"):
-        const_raw = _rule_engine_string_operand(const_raw)
+    # All RHS values must be properly typed literals for the rule engine:
+    # numeric strings are kept bare, arrays/objects passed through, and plain
+    # strings are double-quoted so the engine never mistakes them for symbols.
+    const_raw = _rule_engine_string_operand(const_raw)
     return "{} {} {}".format(attr, op, const_raw)
 
 
@@ -1221,17 +1316,12 @@ def find_action_recommendation(actions_list: Dict[str, Any], data: str) -> Optio
         "Looking up action", pattern_data=data, available_patterns=list(actions_list.keys())
     )
 
-    try:
-        for key, value in actions_list.items():
-            if key == data:
-                logger.debug("Action found", pattern=key, action=value)
-                return value
-
+    value = actions_list.get(data)
+    if value is not None:
+        logger.debug("Action found", pattern=data, action=value)
+    else:
         logger.debug("No action found for pattern", pattern_data=data)
-        return None
-    except Exception as e:
-        logger.error("Error in action lookup", error=str(e), exc_info=True)
-        raise ValueError(f"Failed to lookup action: {str(e)}") from e
+    return value
 
 
 def rule_run(rule: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1285,8 +1375,8 @@ def rule_run(rule: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
     tmp_point: float = 0.0
     try:
         logger.debug("Creating rule engine rule", rule_id=rule_id, condition=rule_condition)
-        rule_engine_rule = rule_engine.Rule(rule["condition"])
-        rule_matched = rule_engine_rule.matches(data)
+        compiled = rule.get("compiled_rule") or rule_engine.Rule(rule["condition"])
+        rule_matched = compiled.matches(data)
         logger.debug(
             "Rule evaluation result",
             rule_id=rule_id,
@@ -1401,9 +1491,7 @@ def _evaluate_feel_expression(expression: str, data: Dict[str, Any]) -> str:
 
     try:
         # Handle string join function: string join({var1}, "sep", {var2})
-        # Pattern: string join(...) or string join (...)
-        join_pattern = r"string\s+join\s*\(([^)]+)\)"
-        match = re.search(join_pattern, expression, re.IGNORECASE)
+        match = _FEEL_JOIN_PATTERN.search(expression)
 
         if match:
             # Extract arguments from string join

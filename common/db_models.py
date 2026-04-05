@@ -25,6 +25,7 @@ from sqlalchemy import (
     JSON,
     Index,
     CheckConstraint,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -91,12 +92,8 @@ class Ruleset(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     version: Mapped[str] = mapped_column(String(50), nullable=False, default="1.0")
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=RuleStatus.ACTIVE.value
-    )
-    tenant_id: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, index=True
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=RuleStatus.ACTIVE.value)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Metadata
@@ -109,9 +106,7 @@ class Ruleset(Base):
 
     # JSON fields for flexible configuration
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
     # Relationships (patterns = actionset entries for this ruleset)
     rules: Mapped[List["Rule"]] = relationship(
@@ -185,9 +180,7 @@ class Rule(Base):
     action_result: Mapped[str] = mapped_column(String(500), nullable=False)
 
     # Status and version
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=RuleStatus.ACTIVE.value
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=RuleStatus.ACTIVE.value)
     version: Mapped[str] = mapped_column(String(50), nullable=False, default="1.0")
 
     # Foreign key to ruleset
@@ -205,15 +198,14 @@ class Rule(Base):
 
     # JSON fields for flexible configuration
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
     # Relationships
     ruleset: Mapped["Ruleset"] = relationship("Ruleset", back_populates="rules")
 
     # Indexes
     __table_args__ = (
+        UniqueConstraint("ruleset_id", "rule_id", name="uq_rules_ruleset_rule_id"),
         Index("idx_rules_rule_id", "rule_id"),
         Index("idx_rules_attribute", "attribute"),
         Index("idx_rules_priority", "priority"),
@@ -296,9 +288,7 @@ class Condition(Base):
     value: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Status
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=RuleStatus.ACTIVE.value
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=RuleStatus.ACTIVE.value)
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -310,9 +300,7 @@ class Condition(Base):
 
     # JSON fields
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
     # Indexes
     __table_args__ = (
@@ -367,9 +355,7 @@ class Attribute(Base):
     data_type: Mapped[str] = mapped_column(String(50), nullable=False, default="string")
 
     # Status
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=RuleStatus.ACTIVE.value
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=RuleStatus.ACTIVE.value)
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -381,9 +367,7 @@ class Attribute(Base):
 
     # JSON fields
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
     # Indexes
     __table_args__ = (
@@ -434,9 +418,7 @@ class Action(Base):
     configuration: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     # Status
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=RuleStatus.ACTIVE.value
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=RuleStatus.ACTIVE.value)
 
     # Foreign key to pattern (one pattern has many actions)
     pattern_id: Mapped[Optional[int]] = mapped_column(
@@ -453,14 +435,10 @@ class Action(Base):
 
     # JSON fields
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
     # Relationships
-    pattern: Mapped[Optional["Pattern"]] = relationship(
-        "Pattern", back_populates="actions"
-    )
+    pattern: Mapped[Optional["Pattern"]] = relationship("Pattern", back_populates="actions")
 
     # Indexes
     __table_args__ = (
@@ -536,9 +514,7 @@ class Pattern(Base):
             raise ValueError("Pattern key cannot be empty")
         return pattern_key.strip()
 
-    def to_dict(
-        self, include_ruleset: bool = False, include_actions: bool = False
-    ) -> dict:
+    def to_dict(self, include_ruleset: bool = False, include_actions: bool = False) -> dict:
         """Convert model to dictionary."""
         result = {
             "id": self.id,
@@ -583,9 +559,7 @@ class ExecutionLog(Base):
     execution_time_ms: Mapped[float] = mapped_column(Float, nullable=False)
 
     # A/B Test tracking
-    ab_test_id: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True, index=True
-    )
+    ab_test_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     ab_test_variant: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     # Metadata
@@ -593,9 +567,7 @@ class ExecutionLog(Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Timestamp (important for TimescaleDB time-series)
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True
-    )
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     # Indexes for time-series queries
     __table_args__ = (
@@ -654,9 +626,7 @@ class RuleVersion(Base):
     action_result: Mapped[str] = mapped_column(String(500), nullable=False)
 
     # Status and version
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=RuleStatus.ACTIVE.value
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=RuleStatus.ACTIVE.value)
     version: Mapped[str] = mapped_column(String(50), nullable=False, default="1.0")
 
     # Foreign key to ruleset
@@ -672,9 +642,7 @@ class RuleVersion(Base):
 
     # JSON fields
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
     # Indexes
     __table_args__ = (
@@ -682,9 +650,7 @@ class RuleVersion(Base):
         Index("idx_rule_versions_ruleset", "ruleset_id", "version_number"),
         Index("idx_rule_versions_is_current", "is_current"),
         CheckConstraint("weight >= 0", name="check_rule_version_weight_non_negative"),
-        CheckConstraint(
-            "rule_point >= 0", name="check_rule_version_point_non_negative"
-        ),
+        CheckConstraint("rule_point >= 0", name="check_rule_version_point_non_negative"),
     )
 
     def to_dict(self) -> dict:
@@ -725,9 +691,7 @@ class RuleABTest(Base):
     __tablename__ = "rule_ab_tests"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    test_id: Mapped[str] = mapped_column(
-        String(255), nullable=False, unique=True, index=True
-    )
+    test_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     test_name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -763,9 +727,7 @@ class RuleABTest(Base):
 
     # Results
     winning_variant: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    statistical_significance: Mapped[Optional[float]] = mapped_column(
-        Float, nullable=True
-    )
+    statistical_significance: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -776,9 +738,7 @@ class RuleABTest(Base):
 
     # JSON fields
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
     # Indexes
     __table_args__ = (
@@ -858,15 +818,11 @@ class TestAssignment(Base):
 
     # Execution tracking
     execution_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_execution_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, nullable=True
-    )
+    last_execution_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Indexes
     __table_args__ = (
-        Index(
-            "idx_test_assignments_test_key", "ab_test_id", "assignment_key", unique=True
-        ),
+        Index("idx_test_assignments_test_key", "ab_test_id", "assignment_key", unique=True),
         Index("idx_test_assignments_variant", "ab_test_id", "variant"),
     )
 
@@ -914,9 +870,7 @@ class Consumer(Base):
     consumer_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=RuleStatus.ACTIVE.value
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=RuleStatus.ACTIVE.value)
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -928,9 +882,7 @@ class Consumer(Base):
 
     # JSON fields for flexible configuration
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    extra_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
     # Indexes
     __table_args__ = (
@@ -972,6 +924,7 @@ class Consumer(Base):
             else None,
         }
 
+
 class ConsumerRuleUsage(Base):
     """
     Consumer Rule Usage model.
@@ -985,7 +938,7 @@ class ConsumerRuleUsage(Base):
     consumer_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     rule_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     ruleset_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    
+
     # Usage stats
     execution_count: Mapped[int] = mapped_column(Integer, default=0)
     last_executed_at: Mapped[datetime] = mapped_column(
@@ -993,9 +946,7 @@ class ConsumerRuleUsage(Base):
     )
 
     # Indexes
-    __table_args__ = (
-        Index("idx_consumer_usage_lookup", "consumer_id", "rule_id", unique=True),
-    )
+    __table_args__ = (Index("idx_consumer_usage_lookup", "consumer_id", "rule_id", unique=True),)
 
     def to_dict(self) -> dict:
         """Convert model to dictionary."""
@@ -1005,7 +956,9 @@ class ConsumerRuleUsage(Base):
             "rule_id": self.rule_id,
             "ruleset_id": self.ruleset_id,
             "execution_count": self.execution_count,
-            "last_executed_at": self.last_executed_at.isoformat() if self.last_executed_at else None,
+            "last_executed_at": self.last_executed_at.isoformat()
+            if self.last_executed_at
+            else None,
         }
 
 
@@ -1036,9 +989,7 @@ class Workflow(Base):
         order_by="WorkflowStage.position",
     )
 
-    __table_args__ = (
-        Index("idx_workflows_is_active", "is_active"),
-    )
+    __table_args__ = (Index("idx_workflows_is_active", "is_active"),)
 
     @validates("name")
     def validate_name(self, key: str, value: str) -> str:

@@ -10,6 +10,7 @@ from common.rule_engine_util import (
     rule_run,
     condition_setup,
     _evaluate_feel_expression,
+    filter_prepared_rules_by_input_data_keys,
 )
 from common.dmn_parser import DMNParser
 from common.logger import get_logger
@@ -21,6 +22,8 @@ from common.exceptions import (
 )
 from common.execution_history import get_execution_history
 from common.metrics import get_metrics
+from common.config import get_config
+from common.db_connection import resolve_database_url_optional
 from common.repository.config_repository import get_config_repository
 from common.repository.db_repository import DatabaseConfigRepository
 from services.usage_tracking import get_usage_tracking_service
@@ -87,7 +90,10 @@ def rules_exec(
             ``conditions``, ``rulepoint``, etc.). When provided (non-``None``), these
             rules are prepared with the configured conditions catalog and executed
             instead of file-based rules. An empty list runs no rules. When ``None``,
-            behavior is unchanged (load rules from configuration).
+            rules are loaded from configuration and, when
+            :attr:`common.config.Config.filter_rules_by_input_keys` is enabled (default),
+            only rules whose condition attributes are all present as top-level keys in
+            ``data`` are executed.
 
     Returns:
         Dictionary containing:
@@ -152,6 +158,17 @@ def rules_exec(
                         ) from prepare_err
                 else:
                     rules_list = rules_set_setup(rules_set_cfg_read())
+                    before_filter = len(rules_list)
+                    rules_list = filter_prepared_rules_by_input_data_keys(
+                        rules_list, validated_data
+                    )
+                    if len(rules_list) != before_filter:
+                        logger.info(
+                            "Filtered rules by input data keys (config-loaded ruleset)",
+                            rules_before=before_filter,
+                            rules_after=len(rules_list),
+                            data_keys=list(validated_data.keys()),
+                        )
             except ConfigurationError:
                 raise
             except DataValidationError:
@@ -179,12 +196,6 @@ def rules_exec(
             # Execute each rule
             for rule in rules_list:
                 try:
-                    rule_id = rule.get("rule_name", "unknown")
-                    logger.debug(
-                        "Processing rule", rule_id=rule_id, rule_priority=rule.get("priority")
-                    )
-
-                    # Validate rule structure
                     if not isinstance(rule, dict):
                         logger.error("Invalid rule structure", rule_type=type(rule).__name__)
                         raise RuleEvaluationError(
@@ -192,6 +203,11 @@ def rules_exec(
                             error_code="RULE_INVALID_STRUCTURE",
                             context={"rule": rule},
                         )
+
+                    rule_id = rule.get("rule_name", "unknown")
+                    logger.debug(
+                        "Processing rule", rule_id=rule_id, rule_priority=rule.get("priority")
+                    )
 
                     # Track per-rule metrics
                     rule_start_time = time.time()
@@ -295,9 +311,14 @@ def rules_exec(
                     # Re-raise rule evaluation errors
                     raise
                 except Exception as rule_error:
+                    rid = (
+                        rule.get("rule_name", "unknown")
+                        if isinstance(rule, dict)
+                        else type(rule).__name__
+                    )
                     logger.error(
                         "Error processing rule",
-                        rule_id=rule.get("rule_name", "unknown"),
+                        rule_id=rid,
                         error=str(rule_error),
                         exc_info=True,
                     )
@@ -432,6 +453,10 @@ def rules_exec_by_ruleset(
     """
     Execute rules for a specific ruleset against input data.
 
+    When :attr:`common.config.Config.filter_rules_by_input_keys` is enabled (default),
+    only rules whose referenced condition attributes are all present as top-level keys
+    in ``data`` are executed.
+
     Args:
         ruleset_name: Name of the ruleset to execute
         data: Dictionary containing input data for rule evaluation
@@ -530,6 +555,16 @@ def rules_exec_by_ruleset(
 
             try:
                 rules_list = rules_set_setup(raw_rules)
+                before_filter = len(rules_list)
+                rules_list = filter_prepared_rules_by_input_data_keys(rules_list, validated_data)
+                if len(rules_list) != before_filter:
+                    logger.info(
+                        "Filtered rules by input data keys (ruleset execution)",
+                        ruleset_name=ruleset_name,
+                        rules_before=before_filter,
+                        rules_after=len(rules_list),
+                        data_keys=list(validated_data.keys()),
+                    )
             except RuleCompilationError as compile_err:
                 logger.error(
                     "Rule preparation failed for ruleset (rules_set_setup)",
@@ -565,13 +600,14 @@ def rules_exec_by_ruleset(
 
             for rule_index, rule in enumerate(rules_list, start=1):
                 try:
-                    rule_id = rule.get("rule_name", "unknown")
                     if not isinstance(rule, dict):
                         raise RuleEvaluationError(
                             f"Invalid rule structure: expected dict, got {type(rule).__name__}",
                             error_code="RULE_INVALID_STRUCTURE",
                             context={"rule": rule},
                         )
+
+                    rule_id = rule.get("rule_name", "unknown")
 
                     rule_start_time = time.time()
                     result = rule_run(rule, validated_data)
@@ -637,13 +673,18 @@ def rules_exec_by_ruleset(
                 except RuleEvaluationError:
                     raise
                 except Exception as rule_error:
+                    rid = (
+                        rule.get("rule_name", "unknown")
+                        if isinstance(rule, dict)
+                        else type(rule).__name__
+                    )
                     logger.error(
                         "Error processing rule during ruleset execution (skipping rule, continuing)",
                         ruleset_name=ruleset_name,
                         correlation_id=correlation_id,
                         rule_index=rule_index,
                         prepared_rules_count=prepared_rules_count,
-                        rule_id=rule.get("rule_name", "unknown"),
+                        rule_id=rid,
                         error=str(rule_error),
                         exc_info=True,
                     )
@@ -768,6 +809,54 @@ def rules_exec_by_ruleset(
             )
 
 
+def _ensure_batch_loads_from_database_when_required(
+    rules: Optional[List[Dict[str, Any]]],
+) -> None:
+    """
+    When ``USE_DATABASE`` is true and rules are not inlined, require a DB URL and
+    :class:`DatabaseConfigRepository` so batch execution cannot silently fall back
+    to file/S3 for rules.
+    """
+    if rules is not None:
+        logger.debug(
+            "Batch execution using inline rules override; skipping database source check",
+            inline_rules_count=len(rules),
+        )
+        return
+
+    config = get_config()
+    if not config.use_database:
+        return
+
+    effective_db_url = config.database_url or resolve_database_url_optional(
+        env_file=config.database_env_file
+    )
+    if not effective_db_url:
+        raise ConfigurationError(
+            "USE_DATABASE is enabled but no database URL is configured. "
+            "Batch execution loads rules from the database when the request does not "
+            "supply inline rules; set TIMESCALE_SERVICE_URL, DATABASE_URL, or PG* "
+            "variables, or DATABASE_ENV_FILE.",
+            error_code="BATCH_REQUIRES_DATABASE_URL",
+            context={},
+        )
+
+    repo = get_config_repository()
+    if not isinstance(repo, DatabaseConfigRepository):
+        raise ConfigurationError(
+            "Batch execution expected rules to load from the database, but the "
+            f"configuration repository is {type(repo).__name__}. "
+            "Restart the application after fixing database settings.",
+            error_code="BATCH_REPOSITORY_NOT_DATABASE",
+            context={"repository_type": type(repo).__name__},
+        )
+
+    logger.info(
+        "Batch execution will load rules from database (no inline rules override)",
+        ruleset_hint=config.default_ruleset_name,
+    )
+
+
 def rules_exec_batch(
     data_list: List[Dict[str, Any]],
     dry_run: bool = False,
@@ -787,6 +876,11 @@ def rules_exec_batch(
         consumer_id: Optional consumer ID for usage tracking
         rules: Same optional rule override as :func:`rules_exec`.
 
+    When ``rules`` is omitted, rule definitions are loaded the same way as
+    :func:`rules_exec` (via :func:`rules_set_cfg_read`). If ``USE_DATABASE`` is
+    ``true``, a database URL and :class:`~common.repository.db_repository.DatabaseConfigRepository`
+    are required so batch runs do not silently use file or S3 rules.
+
     Returns:
         Dictionary containing:
             - results: List of execution results
@@ -797,6 +891,8 @@ def rules_exec_batch(
             - total_execution_time_ms: Total execution time in milliseconds
             - avg_execution_time_ms: Average execution time per item
     """
+    _ensure_batch_loads_from_database_when_required(rules)
+
     batch_start_time = time.time()
     batch_id = correlation_id or str(uuid.uuid4())
 

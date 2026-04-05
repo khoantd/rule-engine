@@ -46,7 +46,7 @@ def sample_rules_config() -> Dict[str, Any]:
                 "conditions": {"item": "C0001"},
                 "rulepoint": 10.0,
                 "weight": 1.0,
-                "action_result": "A"
+                "action_result": "A",
             },
             {
                 "rulename": "Rule2",
@@ -55,26 +55,19 @@ def sample_rules_config() -> Dict[str, Any]:
                 "conditions": {"item": "C0002"},
                 "rulepoint": 20.0,
                 "weight": 1.5,
-                "action_result": "B"
+                "action_result": "B",
             },
             {
                 "rulename": "Rule3",
                 "type": "complex",
                 "priority": 3,
-                "conditions": {
-                    "items": ["C0001", "C0002"],
-                    "mode": "and"
-                },
+                "conditions": {"items": ["C0001", "C0002"], "mode": "and"},
                 "rulepoint": 30.0,
                 "weight": 2.0,
-                "action_result": "C"
-            }
+                "action_result": "C",
+            },
         ],
-        "patterns": {
-            "AB-": "APPROVED",
-            "ABC": "REVIEWED",
-            "-BC": "REJECTED"
-        }
+        "patterns": {"AB-": "APPROVED", "ABC": "REVIEWED", "-BC": "REJECTED"},
     }
 
 
@@ -87,22 +80,22 @@ def sample_conditions_config() -> List[Dict[str, Any]]:
             "condition_name": "Condition 1",
             "attribute": "status",
             "equation": "equal",
-            "constant": "open"
+            "constant": "open",
         },
         {
             "condition_id": "C0002",
             "condition_name": "Condition 2",
             "attribute": "priority",
             "equation": "greater_than",
-            "constant": "10"
+            "constant": "10",
         },
         {
             "condition_id": "C0003",
             "condition_name": "Condition 3",
             "attribute": "type",
             "equation": "range",
-            "constant": ["bug", "feature"]
-        }
+            "constant": ["bug", "feature"],
+        },
     ]
 
 
@@ -115,7 +108,7 @@ def sample_input_data() -> Dict[str, Any]:
         "type": "bug",
         "issue": 35,
         "title": "Superman",
-        "publisher": "DC"
+        "publisher": "DC",
     }
 
 
@@ -125,10 +118,11 @@ def sample_prepared_rule() -> Dict[str, Any]:
     return {
         "priority": 1,
         "rule_name": "Rule1",
-        "condition": "status == \"open\"",
+        "condition": 'status == "open"',
         "rule_point": 10.0,
         "action_result": "A",
-        "weight": 1.0
+        "weight": 1.0,
+        "referenced_attributes": ["status"],
     }
 
 
@@ -140,11 +134,12 @@ def sample_prepared_rules_list(sample_prepared_rule) -> List[Dict[str, Any]]:
         {
             "priority": 2,
             "rule_name": "Rule2",
-            "condition": "priority > \"10\"",
+            "condition": 'priority > "10"',
             "rule_point": 20.0,
             "action_result": "B",
-            "weight": 1.5
-        }
+            "weight": 1.5,
+            "referenced_attributes": ["priority"],
+        },
     ]
 
 
@@ -167,7 +162,7 @@ def mock_config_loader(mock_config_repository) -> MagicMock:
             "conditions": {"item": "C0001"},
             "rulepoint": 10.0,
             "weight": 1.0,
-            "action_result": "A"
+            "action_result": "A",
         }
     ]
     mock_loader.load_conditions_set.return_value = [
@@ -176,13 +171,10 @@ def mock_config_loader(mock_config_repository) -> MagicMock:
             "condition_name": "Condition 1",
             "attribute": "status",
             "equation": "equal",
-            "constant": "open"
+            "constant": "open",
         }
     ]
-    mock_loader.load_actions_set.return_value = {
-        "AB": "APPROVED",
-        "ABC": "REVIEWED"
-    }
+    mock_loader.load_actions_set.return_value = {"AB": "APPROVED", "ABC": "REVIEWED"}
     return mock_loader
 
 
@@ -208,11 +200,8 @@ def mock_s3_client() -> MagicMock:
 def temp_config_file(tmp_path) -> Path:
     """Create a temporary configuration file."""
     config_file = tmp_path / "test_config.json"
-    config_data = {
-        "rules_set": [],
-        "patterns": {}
-    }
-    with open(config_file, 'w') as f:
+    config_data = {"rules_set": [], "patterns": {}}
+    with open(config_file, "w") as f:
         json.dump(config_data, f)
     return config_file
 
@@ -221,7 +210,7 @@ def temp_config_file(tmp_path) -> Path:
 def temp_rules_config_file(tmp_path, sample_rules_config) -> Path:
     """Create a temporary rules configuration file with sample data."""
     config_file = tmp_path / "rules_config.json"
-    with open(config_file, 'w') as f:
+    with open(config_file, "w") as f:
         json.dump(sample_rules_config, f)
     return config_file
 
@@ -231,7 +220,7 @@ def temp_conditions_config_file(tmp_path, sample_conditions_config) -> Path:
     """Create a temporary conditions configuration file with sample data."""
     config_file = tmp_path / "conditions_config.json"
     config_data = {"conditions_set": sample_conditions_config}
-    with open(config_file, 'w') as f:
+    with open(config_file, "w") as f:
         json.dump(config_data, f)
     return config_file
 
@@ -240,6 +229,7 @@ def temp_conditions_config_file(tmp_path, sample_conditions_config) -> Path:
 def reset_cache():
     """Reset cache before each test."""
     from common.cache import get_file_cache
+
     cache = get_file_cache()
     cache.clear()
     yield
@@ -249,7 +239,7 @@ def reset_cache():
 @pytest.fixture(autouse=True)
 def mock_logger():
     """Mock logger to avoid noise in test output."""
-    with patch('common.logger.get_logger') as mock_get_logger:
+    with patch("common.logger.get_logger") as mock_get_logger:
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
         yield mock_logger
@@ -258,7 +248,7 @@ def mock_logger():
 @pytest.fixture
 def mock_file_read():
     """Mock file reading operations."""
-    with patch('builtins.open', create=True) as mock_open:
+    with patch("builtins.open", create=True) as mock_open:
         yield mock_open
 
 
@@ -280,24 +270,23 @@ def sample_condition_objects(sample_conditions_config) -> List[Condition]:
 def sample_ext_rule() -> ExtRule:
     """Return a sample ExtRule object."""
     return ExtRule(
-        rulename="Rule1",
-        type="simple",
-        priority=1,
+        id="",
+        rule_name="Rule1",
         conditions={"item": "C0001"},
-        rulepoint=10.0,
+        description="",
+        result="A",
+        rule_point=10.0,
         weight=1.0,
-        action_result="A"
+        priority=1,
+        type="simple",
+        action_result="A",
     )
 
 
 @pytest.fixture
 def sample_lambda_event() -> Dict[str, Any]:
     """Return sample Lambda event."""
-    return {
-        "status": "open",
-        "priority": "15",
-        "type": "bug"
-    }
+    return {"status": "open", "priority": "15", "type": "bug"}
 
 
 @pytest.fixture
@@ -310,4 +299,3 @@ def sample_lambda_context() -> MagicMock:
     context.memory_limit_in_mb = 128
     context.aws_request_id = "test-request-id"
     return context
-
