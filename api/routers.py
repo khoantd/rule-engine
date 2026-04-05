@@ -15,6 +15,7 @@ from api.routes import (
     conditions_management,
     consumers,
     dmn_upload,
+    executions,
     health,
     hot_reload,
     rule_versioning,
@@ -32,6 +33,7 @@ def get_api_routers() -> List[APIRouter]:
     return [
         health.router,
         rules.router,
+        executions.router,
         workflow.router,
         workflows.router,
         rules_management.router,

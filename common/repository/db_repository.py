@@ -23,6 +23,8 @@ from common.db_models import (
     RuleStatus,
     Base,
     Consumer,
+    ConsumerRulesetRegistration,
+    ExecutionLog,
     Workflow,
     WorkflowStage,
 )
@@ -205,6 +207,32 @@ class DatabaseConfigRepository(ConfigRepository):
             )
 
         return ruleset
+
+    def get_active_ruleset_id_by_exact_name(self, ruleset_name: str) -> Optional[int]:
+        """
+        Return the database id for an active ruleset with this exact name (no fallback).
+
+        Used for consumer registration enforcement and metadata when the URL ruleset
+        name must match a concrete active ruleset.
+        """
+        name = (ruleset_name or "").strip()
+        if not name:
+            return None
+        with get_db_session() as session:
+            ruleset = self._get_ruleset_by_name(session, name)
+            return ruleset.id if ruleset else None
+
+    def get_ruleset_db_id_for_execution(
+        self, requested_ruleset_name: Optional[str]
+    ) -> Optional[int]:
+        """
+        Resolve ruleset primary key the same way as :meth:`read_rules_set` (including fallback).
+        """
+        with get_db_session() as session:
+            ruleset = self._get_ruleset_by_name(session, requested_ruleset_name)
+            if not ruleset:
+                ruleset = self._get_default_or_active_ruleset(session)
+            return ruleset.id if ruleset else None
 
     def read_rules_set(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -1254,6 +1282,162 @@ class ConsumerRepository:
         """Get condition by condition_id string."""
         with get_db_session() as session:
             return session.query(Condition).filter(Condition.condition_id == condition_id).first()
+
+
+REGISTRATION_STATUS_REVOKED = "revoked"
+
+
+class ConsumerRulesetRegistrationRepository:
+    """Persisted consumer (business id) to ruleset registrations."""
+
+    def get_active_registration(
+        self, consumer_id: str, ruleset_id: int
+    ) -> Optional[ConsumerRulesetRegistration]:
+        with get_db_session() as session:
+            return (
+                session.query(ConsumerRulesetRegistration)
+                .filter(
+                    and_(
+                        ConsumerRulesetRegistration.consumer_id == consumer_id,
+                        ConsumerRulesetRegistration.ruleset_id == ruleset_id,
+                        ConsumerRulesetRegistration.status == RuleStatus.ACTIVE.value,
+                    )
+                )
+                .first()
+            )
+
+    def get_any_registration(
+        self, consumer_id: str, ruleset_id: int
+    ) -> Optional[ConsumerRulesetRegistration]:
+        with get_db_session() as session:
+            return (
+                session.query(ConsumerRulesetRegistration)
+                .filter(
+                    and_(
+                        ConsumerRulesetRegistration.consumer_id == consumer_id,
+                        ConsumerRulesetRegistration.ruleset_id == ruleset_id,
+                    )
+                )
+                .first()
+            )
+
+    def list_by_consumer(
+        self,
+        consumer_id: str,
+        active_only: bool = True,
+        limit: int = 200,
+    ) -> List[ConsumerRulesetRegistration]:
+        with get_db_session() as session:
+            q = (
+                session.query(ConsumerRulesetRegistration)
+                .options(joinedload(ConsumerRulesetRegistration.ruleset))
+                .filter(ConsumerRulesetRegistration.consumer_id == consumer_id)
+            )
+            if active_only:
+                q = q.filter(ConsumerRulesetRegistration.status == RuleStatus.ACTIVE.value)
+            return q.order_by(ConsumerRulesetRegistration.created_at.desc()).limit(limit).all()
+
+    def upsert_active(self, consumer_id: str, ruleset_id: int) -> ConsumerRulesetRegistration:
+        with get_db_session() as session:
+            row = (
+                session.query(ConsumerRulesetRegistration)
+                .filter(
+                    and_(
+                        ConsumerRulesetRegistration.consumer_id == consumer_id,
+                        ConsumerRulesetRegistration.ruleset_id == ruleset_id,
+                    )
+                )
+                .first()
+            )
+            if row:
+                row.status = RuleStatus.ACTIVE.value
+                session.flush()
+                logger.info(
+                    "Consumer ruleset registration reactivated",
+                    consumer_id=consumer_id,
+                    ruleset_id=ruleset_id,
+                )
+                return row
+            row = ConsumerRulesetRegistration(
+                consumer_id=consumer_id,
+                ruleset_id=ruleset_id,
+                status=RuleStatus.ACTIVE.value,
+            )
+            session.add(row)
+            session.flush()
+            logger.info(
+                "Consumer ruleset registration created",
+                consumer_id=consumer_id,
+                ruleset_id=ruleset_id,
+            )
+            return row
+
+    def revoke(self, consumer_id: str, ruleset_id: int) -> bool:
+        with get_db_session() as session:
+            row = (
+                session.query(ConsumerRulesetRegistration)
+                .filter(
+                    and_(
+                        ConsumerRulesetRegistration.consumer_id == consumer_id,
+                        ConsumerRulesetRegistration.ruleset_id == ruleset_id,
+                    )
+                )
+                .first()
+            )
+            if not row:
+                return False
+            row.status = REGISTRATION_STATUS_REVOKED
+            session.flush()
+            logger.info(
+                "Consumer ruleset registration revoked",
+                consumer_id=consumer_id,
+                ruleset_id=ruleset_id,
+            )
+            return True
+
+
+class ExecutionLogRepository:
+    """Query persisted rule execution logs."""
+
+    def list_logs(
+        self,
+        consumer_id: Optional[str] = None,
+        ruleset_id: Optional[int] = None,
+        from_ts: Optional[datetime] = None,
+        to_ts: Optional[datetime] = None,
+        limit: int = 100,
+        offset: int = 0,
+        include_payload: bool = False,
+    ) -> Tuple[List[ExecutionLog], int]:
+        """
+        Return execution logs and total count for filters (count without limit/offset).
+
+        Args:
+            consumer_id: Filter by consumer business id
+            ruleset_id: Filter by ruleset primary key
+            from_ts: Inclusive lower bound on timestamp
+            to_ts: Exclusive upper bound on timestamp
+            limit: Page size
+            offset: Page offset
+            include_payload: If False, caller should not rely on input_data/output_data
+                (still loaded by ORM; API can omit from response)
+
+        Returns:
+            Tuple of (rows, total_count)
+        """
+        with get_db_session() as session:
+            q = session.query(ExecutionLog)
+            if consumer_id:
+                q = q.filter(ExecutionLog.consumer_id == consumer_id)
+            if ruleset_id is not None:
+                q = q.filter(ExecutionLog.ruleset_id == ruleset_id)
+            if from_ts is not None:
+                q = q.filter(ExecutionLog.timestamp >= from_ts)
+            if to_ts is not None:
+                q = q.filter(ExecutionLog.timestamp < to_ts)
+            total = q.count()
+            rows = q.order_by(desc(ExecutionLog.timestamp)).offset(offset).limit(limit).all()
+            return rows, total
 
 
 class AttributeRepository:

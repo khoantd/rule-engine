@@ -36,6 +36,31 @@ from pathlib import Path
 logger = get_logger(__name__)
 
 
+def _safe_ruleset_db_id_for_execution(
+    repo: DatabaseConfigRepository, requested_ruleset_name: Optional[str]
+) -> Optional[int]:
+    """Resolve ruleset PK for logging; never fail rule execution if the DB is unavailable."""
+    try:
+        return repo.get_ruleset_db_id_for_execution(requested_ruleset_name)
+    except Exception as e:
+        logger.warning(
+            "Could not resolve ruleset id for execution logging",
+            error=str(e),
+            ruleset_name=requested_ruleset_name,
+        )
+        return None
+
+
+def _default_ruleset_db_id_for_logging() -> Optional[int]:
+    """Resolve default ruleset PK when using DatabaseConfigRepository (for execution logs)."""
+    crepo = get_config_repository()
+    if not isinstance(crepo, DatabaseConfigRepository):
+        return None
+    cfg = get_config()
+    hint = cfg.default_ruleset_name or crepo.default_ruleset_name
+    return _safe_ruleset_db_id_for_execution(crepo, hint)
+
+
 def validate_input_data(data: Any) -> Dict[str, Any]:
     """
     Validate input data for rules execution.
@@ -388,6 +413,10 @@ def rules_exec(
                 dry_run=dry_run,
             )
 
+            ruleset_db_id_for_log: Optional[int] = None
+            if rules is None:
+                ruleset_db_id_for_log = _default_ruleset_db_id_for_logging()
+
             # Log to execution history
             history.log_execution(
                 input_data=validated_data,
@@ -397,6 +426,8 @@ def rules_exec(
                 rules_evaluated=executed_rules_count,
                 rules_matched=matched_rules_count,
                 rule_evaluations=rule_evaluations if dry_run else None,
+                ruleset_id=ruleset_db_id_for_log,
+                consumer_id=consumer_id,
             )
 
             # Track consumer usage if consumer_id is provided
@@ -404,7 +435,9 @@ def rules_exec(
                 try:
                     tracking_service = get_usage_tracking_service()
                     tracking_service.track_usage(
-                        consumer_id=consumer_id, rule_ids=matched_rule_ids, ruleset_id=None
+                        consumer_id=consumer_id,
+                        rule_ids=matched_rule_ids,
+                        ruleset_id=ruleset_db_id_for_log,
                     )
                 except Exception as e:
                     logger.warning(
@@ -431,6 +464,9 @@ def rules_exec(
         # Log failed execution to history
         if error:
             execution_time_ms = (time.time() - start_time) * 1000
+            fail_ruleset_id: Optional[int] = None
+            if rules is None:
+                fail_ruleset_id = _default_ruleset_db_id_for_logging()
             history.log_execution(
                 input_data=data if isinstance(data, dict) else {},
                 output_data={},
@@ -440,6 +476,8 @@ def rules_exec(
                 rules_matched=0,
                 error=error,
                 error_code=error_code,
+                ruleset_id=fail_ruleset_id,
+                consumer_id=consumer_id,
             )
 
 
@@ -496,12 +534,17 @@ def rules_exec_by_ruleset(
 
     error = None
     error_code = None
+    ruleset_db_id: Optional[int] = None
 
     try:
         with metrics.timer(
             "rule_execution", dimensions={"dry_run": str(dry_run), "ruleset": ruleset_name}
         ):
             validated_data = validate_input_data(data)
+
+            crepo = get_config_repository()
+            if isinstance(crepo, DatabaseConfigRepository):
+                ruleset_db_id = _safe_ruleset_db_id_for_execution(crepo, ruleset_name)
 
             results = []
             rule_evaluations: List[Dict[str, Any]] = []
@@ -761,6 +804,8 @@ def rules_exec_by_ruleset(
                 rules_evaluated=executed_rules_count,
                 rules_matched=matched_rules_count,
                 rule_evaluations=rule_evaluations if dry_run else None,
+                ruleset_id=ruleset_db_id,
+                consumer_id=consumer_id,
             )
 
             if consumer_id and matched_rule_ids:
@@ -769,7 +814,7 @@ def rules_exec_by_ruleset(
                     tracking_service.track_usage(
                         consumer_id=consumer_id,
                         rule_ids=matched_rule_ids,
-                        ruleset_id=None,
+                        ruleset_id=ruleset_db_id,
                     )
                 except Exception as e:
                     logger.warning(
@@ -806,6 +851,8 @@ def rules_exec_by_ruleset(
                 rules_matched=0,
                 error=error,
                 error_code=error_code,
+                ruleset_id=ruleset_db_id,
+                consumer_id=consumer_id,
             )
 
 
@@ -1860,6 +1907,7 @@ def dmn_rules_exec(
                 rules_evaluated=executed_rules_count,
                 rules_matched=matched_rules_count,
                 rule_evaluations=rule_evaluations if dry_run else None,
+                consumer_id=consumer_id,
             )
 
             # Track consumer usage if consumer_id is provided
@@ -1903,6 +1951,7 @@ def dmn_rules_exec(
                 rules_matched=0,
                 error=error,
                 error_code=error_code,
+                consumer_id=consumer_id,
             )
 
 

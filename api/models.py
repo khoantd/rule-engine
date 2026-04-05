@@ -1011,3 +1011,61 @@ class ConsumersListResponse(BaseModel):
 
     consumers: List[ConsumerResponse] = Field(..., description="List of consumers")
     count: int = Field(..., description="Total number of consumers")
+
+
+class ConsumerRulesetRegisterRequest(BaseModel):
+    """Register a consumer to execute a DB ruleset (by name)."""
+
+    ruleset_name: str = Field(..., description="Active ruleset name to register")
+
+
+class ConsumerRulesetRegistrationResponse(BaseModel):
+    """A single consumer↔ruleset registration row."""
+
+    id: int = Field(..., description="Registration primary key")
+    consumer_id: str = Field(..., description="Consumer business identifier")
+    ruleset_id: int = Field(..., description="Ruleset primary key")
+    ruleset_name: Optional[str] = Field(None, description="Ruleset name when available")
+    status: str = Field(..., description="Registration status (e.g. active, revoked)")
+    created_at: Optional[str] = Field(None, description="Created timestamp")
+    updated_at: Optional[str] = Field(None, description="Updated timestamp")
+
+
+class ConsumerRulesetsListResponse(BaseModel):
+    """List of ruleset registrations for a consumer."""
+
+    registrations: List[ConsumerRulesetRegistrationResponse] = Field(
+        ..., description="Registration rows"
+    )
+    count: int = Field(..., description="Number of rows returned")
+
+
+class ExecutionLogSummaryResponse(BaseModel):
+    """Summary of one persisted rule execution (no payloads unless requested)."""
+
+    id: int
+    execution_id: str
+    correlation_id: Optional[str] = Field(None, description="Not stored on ExecutionLog; reserved")
+    ruleset_id: Optional[int] = None
+    consumer_id: Optional[str] = None
+    total_points: Optional[float] = None
+    pattern_result: Optional[str] = None
+    execution_time_ms: float
+    success: bool
+    error_message: Optional[str] = None
+    timestamp: Optional[str] = None
+    input_data: Optional[Dict[str, Any]] = Field(
+        None, description="Present when include_payload=true"
+    )
+    output_data: Optional[Dict[str, Any]] = Field(
+        None, description="Present when include_payload=true"
+    )
+
+
+class ExecutionLogsListResponse(BaseModel):
+    """Paginated execution log query result."""
+
+    executions: List[ExecutionLogSummaryResponse] = Field(..., description="Matching executions")
+    total: int = Field(..., description="Total rows matching filters (before limit/offset)")
+    limit: int
+    offset: int

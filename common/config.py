@@ -60,6 +60,13 @@ class Config:
         not in ("0", "false", "no")
     )
 
+    # When True, POST /api/v1/rules/{ruleset}/execute requires a registered active consumer
+    # and an active registration for that ruleset (requires USE_DATABASE).
+    require_consumer_ruleset_registration: bool = field(
+        default_factory=lambda: os.getenv("REQUIRE_CONSUMER_RULESET_REGISTRATION", "false").lower()
+        == "true"
+    )
+
     # AWS Configuration
     aws_region: str = field(default_factory=lambda: os.getenv("AWS_REGION", "us-east-1"))
     s3_bucket: Optional[str] = field(default_factory=lambda: os.getenv("S3_BUCKET"))

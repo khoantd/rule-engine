@@ -115,6 +115,11 @@ class Ruleset(Base):
     patterns: Mapped[List["Pattern"]] = relationship(
         "Pattern", back_populates="ruleset", cascade="all, delete-orphan"
     )
+    consumer_registrations: Mapped[List["ConsumerRulesetRegistration"]] = relationship(
+        "ConsumerRulesetRegistration",
+        back_populates="ruleset",
+        cascade="all, delete-orphan",
+    )
 
     # Indexes
     __table_args__ = (
@@ -554,6 +559,7 @@ class ExecutionLog(Base):
 
     # Execution details
     ruleset_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    consumer_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     total_points: Mapped[float] = mapped_column(Float, nullable=True)
     pattern_result: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     execution_time_ms: Mapped[float] = mapped_column(Float, nullable=False)
@@ -575,6 +581,7 @@ class ExecutionLog(Base):
         Index("idx_execution_logs_execution_id", "execution_id"),
         Index("idx_execution_logs_success", "success"),
         Index("idx_execution_logs_ab_test", "ab_test_id", "ab_test_variant"),
+        Index("idx_execution_logs_consumer_id", "consumer_id"),
     )
 
     def to_dict(self) -> dict:
@@ -585,6 +592,7 @@ class ExecutionLog(Base):
             "input_data": self.input_data,
             "output_data": self.output_data,
             "ruleset_id": self.ruleset_id,
+            "consumer_id": self.consumer_id,
             "total_points": self.total_points,
             "pattern_result": self.pattern_result,
             "execution_time_ms": self.execution_time_ms,
@@ -830,30 +838,14 @@ class TestAssignment(Base):
         """Convert model to dictionary."""
         return {
             "id": self.id,
-            "test_id": self.test_id,
-            "test_name": self.test_name,
-            "description": self.description,
-            "rule_id": self.rule_id,
-            "ruleset_id": self.ruleset_id,
-            "traffic_split_a": self.traffic_split_a,
-            "traffic_split_b": self.traffic_split_b,
-            "variant_a_version": self.variant_a_version,
-            "variant_a_description": self.variant_a_description,
-            "variant_b_version": self.variant_b_version,
-            "variant_b_description": self.variant_b_description,
-            "status": self.status,
-            "start_time": self.start_time.isoformat() if self.start_time else None,
-            "end_time": self.end_time.isoformat() if self.end_time else None,
-            "duration_hours": self.duration_hours,
-            "min_sample_size": self.min_sample_size,
-            "confidence_level": self.confidence_level,
-            "winning_variant": self.winning_variant,
-            "statistical_significance": self.statistical_significance,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "created_by": self.created_by,
-            "tags": self.tags,
-            "metadata": self.extra_metadata,
+            "ab_test_id": self.ab_test_id,
+            "assignment_key": self.assignment_key,
+            "variant": self.variant,
+            "assigned_at": self.assigned_at.isoformat() if self.assigned_at else None,
+            "execution_count": self.execution_count,
+            "last_execution_at": self.last_execution_at.isoformat()
+            if self.last_execution_at
+            else None,
         }
 
 
@@ -912,17 +904,48 @@ class Consumer(Base):
             "updated_by": self.updated_by,
         }
 
-        return {
+
+class ConsumerRulesetRegistration(Base):
+    """
+    Registration of a consumer (business consumer_id string) to execute a ruleset.
+
+    Enforcement is optional and controlled by REQUIRE_CONSUMER_RULESET_REGISTRATION.
+    """
+
+    __tablename__ = "consumer_ruleset_registrations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consumer_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    ruleset_id: Mapped[int] = mapped_column(
+        ForeignKey("rulesets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=RuleStatus.ACTIVE.value)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    ruleset: Mapped["Ruleset"] = relationship("Ruleset", back_populates="consumer_registrations")
+
+    __table_args__ = (
+        UniqueConstraint("consumer_id", "ruleset_id", name="uq_consumer_ruleset_registration"),
+        Index("idx_crr_consumer_ruleset_status", "consumer_id", "status"),
+    )
+
+    def to_dict(self, include_ruleset_name: bool = False) -> dict:
+        """Convert model to dictionary."""
+        result = {
             "id": self.id,
-            "ab_test_id": self.ab_test_id,
-            "assignment_key": self.assignment_key,
-            "variant": self.variant,
-            "assigned_at": self.assigned_at.isoformat() if self.assigned_at else None,
-            "execution_count": self.execution_count,
-            "last_execution_at": self.last_execution_at.isoformat()
-            if self.last_execution_at
-            else None,
+            "consumer_id": self.consumer_id,
+            "ruleset_id": self.ruleset_id,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+        if include_ruleset_name and self.ruleset:
+            result["ruleset_name"] = self.ruleset.name
+        return result
 
 
 class ConsumerRuleUsage(Base):

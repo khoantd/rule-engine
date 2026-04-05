@@ -84,6 +84,8 @@ class ExecutionHistory:
         rule_evaluations: Optional[List[Dict[str, Any]]] = None,
         error: Optional[str] = None,
         error_code: Optional[str] = None,
+        ruleset_id: Optional[int] = None,
+        consumer_id: Optional[str] = None,
     ) -> str:
         """
         Log a rule execution to history.
@@ -98,6 +100,8 @@ class ExecutionHistory:
             rule_evaluations: List of per-rule evaluation details
             error: Optional error message
             error_code: Optional error code
+            ruleset_id: Optional ruleset primary key for analytics
+            consumer_id: Optional consumer business id for analytics
 
         Returns:
             Execution ID
@@ -152,7 +156,8 @@ class ExecutionHistory:
                     execution_id=execution_id,
                     input_data=input_data,
                     output_data=output_data,
-                    ruleset_id=None,
+                    ruleset_id=ruleset_id,
+                    consumer_id=consumer_id,
                     total_points=total_points,
                     pattern_result=pattern_result,
                     execution_time_ms=execution_time_ms,
@@ -285,10 +290,7 @@ class ExecutionHistory:
                 continue
 
             # Action recommendation filter
-            if (
-                action_recommendation
-                and record.action_recommendation != action_recommendation
-            ):
+            if action_recommendation and record.action_recommendation != action_recommendation:
                 continue
 
             # Error filter
@@ -407,9 +409,7 @@ class ExecutionHistory:
         # Cleanup rule name index
         for rule_name in list(self._by_rule_name.keys()):
             self._by_rule_name[rule_name] = [
-                r
-                for r in self._by_rule_name[rule_name]
-                if r.timestamp >= before_timestamp
+                r for r in self._by_rule_name[rule_name] if r.timestamp >= before_timestamp
             ]
             if not self._by_rule_name[rule_name]:
                 del self._by_rule_name[rule_name]

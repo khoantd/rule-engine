@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 
-from api.deps import get_correlation_id
+from api.deps import get_consumer_ruleset_registration_service_dep, get_correlation_id
 from api.middleware.auth import get_api_key
 from api.models import (
     BatchItemResult,
@@ -25,7 +25,13 @@ from api.models import (
 )
 from common.exceptions import DataValidationError
 from common.logger import get_logger
-from services.ruleengine_exec import dmn_rules_exec, rules_exec, rules_exec_batch, rules_exec_by_ruleset
+from services.consumer_ruleset_registration import ConsumerRulesetRegistrationService
+from services.ruleengine_exec import (
+    dmn_rules_exec,
+    rules_exec,
+    rules_exec_batch,
+    rules_exec_by_ruleset,
+)
 
 logger = get_logger(__name__)
 
@@ -158,6 +164,9 @@ async def execute_ruleset(
     request: RuleExecutionRequest,
     correlation_id: Optional[str] = Depends(get_correlation_id),
     api_key: Optional[str] = Depends(get_api_key),
+    registration_service: ConsumerRulesetRegistrationService = Depends(
+        get_consumer_ruleset_registration_service_dep
+    ),
 ) -> RuleExecutionResponse:
     """Execute a specific ruleset against input data."""
     start_time = time.time()
@@ -169,6 +178,7 @@ async def execute_ruleset(
         dry_run=request.dry_run,
         data_keys=list(request.data.keys()),
     )
+    registration_service.ensure_can_execute_ruleset(request.consumer_id, ruleset_name)
     result = rules_exec_by_ruleset(
         ruleset_name=ruleset_name,
         data=request.data,

@@ -23,6 +23,11 @@ from services.conditions_management import (
     get_conditions_management_service,
 )
 from services.consumer_management import ConsumerManagementService, get_consumer_management_service
+from services.consumer_ruleset_registration import (
+    ConsumerRulesetRegistrationService,
+    get_consumer_ruleset_registration_service,
+)
+from services.execution_query import ExecutionQueryService, get_execution_query_service
 from services.hot_reload import HotReloadService, get_hot_reload_service
 from services.rule_management import RuleManagementService, get_rule_management_service
 from services.rule_versioning import RuleVersioningService, get_rule_versioning_service
@@ -79,3 +84,11 @@ def get_rule_versioning_service_dep() -> RuleVersioningService:
 
 def get_consumer_management_service_dep() -> ConsumerManagementService:
     return get_consumer_management_service()
+
+
+def get_consumer_ruleset_registration_service_dep() -> ConsumerRulesetRegistrationService:
+    return get_consumer_ruleset_registration_service()
+
+
+def get_execution_query_service_dep() -> ExecutionQueryService:
+    return get_execution_query_service()
