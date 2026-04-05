@@ -6,13 +6,12 @@ initializing the database schema.
 """
 
 import sys
-import os
 from pathlib import Path
 
 from alembic.config import Config
 from alembic import command
 
-from common.db_connection import init_database, load_database_url, get_engine
+from common.db_connection import init_database, load_database_url
 from common.logger import get_logger
 
 logger = get_logger(__name__)
@@ -27,11 +26,10 @@ def run_migrations(alembic_dir: str = None, env_file: str = None) -> None:
         env_file: Path to .env file with database credentials
     """
     if env_file:
-        logger.info(f"Loading database credentials from: {env_file}")
-        load_database_url(env_file)
+        logger.info("Loading database credentials from env file", env_file=env_file)
 
-    # Initialize database connection
-    init_database()
+    # Single engine for verify + Alembic (avoids env.py rebuilding URL / ConfigParser issues)
+    engine = init_database(env_file=env_file)
 
     # Get alembic config
     if alembic_dir is None:
@@ -39,6 +37,7 @@ def run_migrations(alembic_dir: str = None, env_file: str = None) -> None:
         alembic_dir = str(project_root / "alembic.ini")
 
     alembic_cfg = Config(alembic_dir)
+    alembic_cfg.attributes["connection"] = engine
 
     logger.info("Running database migrations...")
 

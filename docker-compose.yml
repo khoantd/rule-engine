@@ -15,6 +15,13 @@ services:
       - API_WORKERS=1
       - ENVIRONMENT=production
       - LOG_LEVEL=INFO
+      # DB: image has no .env (see .dockerignore); pass through from host .env for compose interpolation
+      - USE_DATABASE=${USE_DATABASE:-false}
+      - TIMESCALE_SERVICE_URL=${TIMESCALE_SERVICE_URL:-}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - RUN_DB_MIGRATIONS_ON_STARTUP=${RUN_DB_MIGRATIONS_ON_STARTUP:-true}
+      - DEFAULT_RULESET_NAME=${DEFAULT_RULESET_NAME:-}
+      - REQUIRE_CONSUMER_RULESET_REGISTRATION=${REQUIRE_CONSUMER_RULESET_REGISTRATION:-false}
       - API_KEY_ENABLED=${API_KEY_ENABLED:-false}
       - API_KEY=${API_KEY:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
@@ -36,8 +43,8 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 180s
     restart: unless-stopped
     networks:
       - rule-engine-network

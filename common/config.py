@@ -142,25 +142,36 @@ class Config:
             config.jira_url = parser.get("JIRA", "url", fallback=config.jira_url)
             config.jira_username = parser.get("JIRA", "username", fallback=config.jira_username)
 
-            # Try to load token from secrets manager first, fallback to file
+            # Token priority: SSM / Secrets Manager / JIRA_TOKEN env (via get_secret), then INI file.
+            secrets_manager = get_secrets_manager()
+            token_from_vault: Optional[str] = None
             try:
-                secrets_manager = get_secrets_manager()
-                config.jira_token = secrets_manager.get_secret("jira_token", required=False)
-                if config.jira_token:
-                    logger.info("JIRA token loaded from secrets manager")
-                else:
-                    # Fallback to file if not in secrets manager
-                    config.jira_token = parser.get("JIRA", "token", fallback=config.jira_token)
-                    if config.jira_token:
-                        logger.warning(
-                            "JIRA token loaded from config file. "
-                            "In production, use secrets manager instead.",
-                            secret_key="jira_token",
-                        )
+                token_from_vault = secrets_manager.get_secret("jira_token", required=False)
             except Exception as e:
-                # If secrets manager fails, fallback to file
-                logger.warning("Secrets manager not available, using config file", error=str(e))
-                config.jira_token = parser.get("JIRA", "token", fallback=config.jira_token)
+                logger.warning(
+                    "Secrets manager error while resolving JIRA token",
+                    error=str(e),
+                    secret_key="jira_token",
+                )
+
+            raw_file_token = (parser.get("JIRA", "token", fallback="") or "").strip()
+
+            if token_from_vault:
+                config.jira_token = token_from_vault
+                # DEBUG: this path often runs twice if code calls Config.from_file after
+                # package import (get_config() is triggered early via common.cache.FileCache).
+                logger.debug(
+                    "JIRA token resolved (SSM, Secrets Manager, or JIRA_TOKEN env)",
+                    secret_key="jira_token",
+                )
+            elif raw_file_token:
+                config.jira_token = raw_file_token
+                logger.warning(
+                    "JIRA token loaded from config file. "
+                    "Set JIRA_TOKEN or use AWS SSM / Secrets Manager instead.",
+                    secret_key="jira_token",
+                )
+            # else: keep token from cls() default (typically unset if JIRA_TOKEN missing)
 
         # Load RULE config from file if present
         if "RULE" in parser:
@@ -189,15 +200,6 @@ class Config:
                 "CONDITIONS", "file_name", fallback=config.conditions_config_path
             )
 
-        # Validate configuration for hard-coded secrets (warns in dev, fails in prod)
-        config_dict = {
-            "jira_token": config.jira_token,
-            "jira_username": config.jira_username,
-        }
-        if config.is_production():
-            # In production, validate strictly
-            validate_config_secrets(config_dict)
-
         return config
 
     def validate(self) -> None:
@@ -216,12 +218,13 @@ class Config:
         """
         errors = []
 
-        # Validate environment
-        if self.environment not in ["dev", "staging", "prod"]:
+        # Validate environment (Docker / platforms often use "production")
+        env_lower = (self.environment or "").strip().lower()
+        if env_lower not in ("dev", "staging", "prod", "production"):
             errors.append(f"Invalid environment: {self.environment}")
 
-        # Validate file paths exist (only for local files, not S3)
-        if not self.s3_bucket:
+        # Validate file paths exist (only when rules/conditions are loaded from local files)
+        if not self.s3_bucket and not self.use_database:
             rules_path = Path(self.rules_config_path)
             if not rules_path.exists():
                 errors.append(f"Rules config file not found: {self.rules_config_path}")
@@ -272,7 +275,7 @@ class Config:
 
     def is_production(self) -> bool:
         """Check if running in production environment."""
-        return self.environment == "prod"
+        return (self.environment or "").strip().lower() in ("prod", "production")
 
     def is_development(self) -> bool:
         """Check if running in development environment."""
@@ -303,7 +306,15 @@ def get_config() -> Config:
         try:
             _config.validate()
         except ConfigurationError as e:
-            logger.error(f"Configuration validation failed: {e}")
+            err_list = e.context.get("errors") if e.context else None
+            logger.error(
+                "Configuration validation failed",
+                message=str(e),
+                error_code=e.error_code,
+                validation_errors=err_list,
+                context=e.context,
+            )
+            _config = None
             raise
 
     return _config

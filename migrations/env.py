@@ -5,21 +5,15 @@ This file is called by the alembic command line tool and is used to
 configure database migrations.
 """
 
-import asyncio
 from logging.config import fileConfig
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from sqlalchemy import create_engine, pool
 
 from alembic import context
-from dotenv import load_dotenv
-import os
 
 # Import models
 from common.db_models import Base
-
-# Load environment variables
-load_dotenv()
+from common.db_connection import resolve_database_url_optional
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -34,15 +28,22 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Get database URL from environment
-database_url = os.getenv("TIMESCALE_SERVICE_URL") or os.getenv("DATABASE_URL")
 
-# SQLAlchemy 2.x loads the "postgresql" dialect only; normalize postgres:// -> postgresql://
-if database_url and database_url.startswith("postgres://"):
-    database_url = "postgresql://" + database_url[11:]
+def _migration_database_url() -> str:
+    """
+    Resolve DB URL the same way as the app (TIMESCALE_SERVICE_URL, DATABASE_URL, PG*).
 
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    Avoids relying on a .env file inside Docker images (typically not present) and
+    avoids stuffing raw URLs into alembic.ini (ConfigParser treats % specially).
+    """
+    url = resolve_database_url_optional()
+    if not url:
+        raise RuntimeError(
+            "Database URL not found for migrations. Set TIMESCALE_SERVICE_URL or "
+            "DATABASE_URL (or PGHOST, PGUSER, PGDATABASE), or pass --env-file when "
+            "using the migration CLI."
+        )
+    return url
 
 
 def run_migrations_offline() -> None:
@@ -56,7 +57,7 @@ def run_migrations_offline() -> None:
     Calls to context.execute() here emit the given string to the
     script output.
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = _migration_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -77,11 +78,8 @@ def run_migrations_online() -> None:
     connectable = config.attributes.get("connection")
 
     if connectable is None:
-        # Only works with sync engine
-        from sqlalchemy import create_engine
-
         connectable = create_engine(
-            config.get_main_option("sqlalchemy.url"),
+            _migration_database_url(),
             poolclass=pool.NullPool,
         )
 

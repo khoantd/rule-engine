@@ -22,6 +22,7 @@ sys.path.insert(0, str(project_root))
 
 import uvicorn
 from common.config import get_config
+from common.exceptions import ConfigurationError
 from common.logger import get_logger
 
 logger = get_logger(__name__)
@@ -88,6 +89,17 @@ def main():
         
     except KeyboardInterrupt:
         logger.info("Received shutdown signal, stopping server")
+    except ConfigurationError as e:
+        err_list = e.context.get("errors") if e.context else None
+        logger.error(
+            "Failed to start API server: invalid configuration",
+            message=str(e),
+            error_code=e.error_code,
+            validation_errors=err_list,
+            context=e.context,
+            exc_info=True,
+        )
+        sys.exit(1)
     except Exception as e:
         logger.error("Failed to start API server", error=str(e), exc_info=True)
         sys.exit(1)

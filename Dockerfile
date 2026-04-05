@@ -41,7 +41,8 @@ USER appuser
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Long start-period: Alembic upgrades on boot (e.g. large execution_logs) can exceed 30s.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 # Set default environment variables
