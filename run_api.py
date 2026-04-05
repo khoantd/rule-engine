@@ -27,9 +27,34 @@ from common.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _maybe_run_db_migrations_on_startup() -> None:
+    """
+    Apply Alembic migrations when a database URL is configured.
+
+    Skipped when RUN_DB_MIGRATIONS_ON_STARTUP is false (e.g. multi-replica
+    deployments that run migrations from a separate job).
+    """
+    flag = os.getenv("RUN_DB_MIGRATIONS_ON_STARTUP", "true").strip().lower()
+    if flag in ("0", "false", "no"):
+        logger.info("Skipping database migrations on startup", reason="RUN_DB_MIGRATIONS_ON_STARTUP")
+        return
+
+    from common.db_connection import resolve_database_url_optional
+
+    if resolve_database_url_optional() is None:
+        return
+
+    from common.db_migrations import run_migrations
+
+    logger.info("Running database migrations before API startup")
+    run_migrations()
+
+
 def main():
     """Start the Rule Engine API server."""
     try:
+        _maybe_run_db_migrations_on_startup()
+
         # Get configuration
         config = get_config()
         
