@@ -1438,6 +1438,16 @@ def rule_run(rule: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
             condition=rule_condition,
         )
         tmp_action = "-"
+    except rule_engine.errors.EvaluationError as eval_error:
+        # Data type mismatch (e.g. None or wrong-typed field in input hitting a typed comparison).
+        # Treat as a non-match rather than a hard error — the rule simply cannot fire for this data.
+        logger.warning(
+            "Rule evaluation skipped - data type mismatch",
+            rule_id=rule_id,
+            error=str(eval_error),
+            condition=rule_condition,
+        )
+        tmp_action = "-"
     except Exception as evaluation_error:
         logger.error(
             "Unexpected error in rule evaluation",

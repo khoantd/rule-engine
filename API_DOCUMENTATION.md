@@ -29,6 +29,7 @@ Comprehensive REST API reference for the Rule Engine service — covering rule e
   - [A/B Testing](#ab-testing)
   - [Hot Reload](#hot-reload)
   - [Consumer Management](#consumer-management)
+  - [Execution History](#execution-history)
   - [WebSocket](#websocket)
 - [Data Models Reference](#data-models-reference)
 - [Configuration Reference](#configuration-reference)
@@ -105,6 +106,7 @@ All resource endpoints are under `/api/v1`. Health and root endpoints are at the
 | `/api/v1/workflow/` | Workflow execution |
 | `/api/v1/workflows` | Workflow definitions CRUD |
 | `/api/v1/dmn/` | DMN file upload and parsing |
+| `/api/v1/executions` | Execution history queries |
 | `/consumers` | Consumer management |
 
 Interactive docs (Swagger UI) are available at `http://localhost:8000/docs` when the server is running.
@@ -394,6 +396,46 @@ curl -X POST http://localhost:8000/api/v1/rules/execute \
     "data": {"issue": 35, "title": "Superman", "publisher": "DC"},
     "dry_run": false
   }'
+```
+
+---
+
+#### `POST /api/v1/rules/{ruleset_name}/execute`
+
+Evaluates rules from a specific named ruleset against a single input item. The consumer identified by `consumer_id` must have an active registration for the target ruleset (see [Consumer Management](#consumer-management)).
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ruleset_name` | string | Name of the ruleset to execute |
+
+**Request Body** — Same schema as `POST /api/v1/rules/execute`.
+
+```json
+{
+  "data": {
+    "issue": 35,
+    "publisher": "DC"
+  },
+  "dry_run": false,
+  "correlation_id": "req-12345",
+  "consumer_id": "client-abc"
+}
+```
+
+**Response `200`** — Same `RuleExecutionResponse` schema as `POST /api/v1/rules/execute`.
+
+**Response `403`** — Consumer is not registered for the ruleset.
+
+**Response `404`** — Ruleset not found.
+
+**Example**
+
+```bash
+curl -X POST http://localhost:8000/api/v1/rules/comic-scoring/execute \
+  -H "Content-Type: application/json" \
+  -d '{"data": {"issue": 35, "publisher": "DC"}, "consumer_id": "client-abc"}'
 ```
 
 ---
@@ -1522,7 +1564,7 @@ Create a consumer.
 | `tags` | array of strings | No | Categorization tags |
 | `metadata` | object | No | Arbitrary metadata |
 
-**Response `200`** — Created `ConsumerResponse`.
+**Response `201`** — Created `ConsumerResponse`.
 
 ---
 
@@ -1539,6 +1581,190 @@ Update a consumer. All fields optional.
 Delete a consumer.
 
 **Response `204`**
+
+---
+
+#### `POST /consumers/{consumer_id}/rulesets`
+
+Register a consumer to execute a named database ruleset. If the registration already exists but was previously revoked, it is reactivated.
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `consumer_id` | string | The consumer's business identifier |
+
+**Request Body**
+
+```json
+{
+  "ruleset_name": "comic-scoring"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ruleset_name` | string | Yes | Name of the ruleset to register |
+
+**Response `201`** — `ConsumerRulesetRegistrationResponse`
+
+```json
+{
+  "id": 1,
+  "consumer_id": "client-abc",
+  "ruleset_id": 5,
+  "ruleset_name": "comic-scoring",
+  "status": "active",
+  "created_at": "2026-04-01T00:00:00Z",
+  "updated_at": "2026-04-01T00:00:00Z"
+}
+```
+
+**Response `400`** — Ruleset not found or validation error.
+
+**Response `404`** — Consumer not found.
+
+---
+
+#### `GET /consumers/{consumer_id}/rulesets`
+
+List ruleset registrations for a consumer.
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `consumer_id` | string | The consumer's business identifier |
+
+**Query Parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `active_only` | boolean | `true` | If `true`, return only active registrations. If `false`, include revoked ones. |
+
+**Response `200`**
+
+```json
+{
+  "registrations": [
+    {
+      "id": 1,
+      "consumer_id": "client-abc",
+      "ruleset_id": 5,
+      "ruleset_name": "comic-scoring",
+      "status": "active",
+      "created_at": "2026-04-01T00:00:00Z",
+      "updated_at": "2026-04-01T00:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+**Response `404`** — Consumer not found.
+
+---
+
+#### `DELETE /consumers/{consumer_id}/rulesets/{ruleset_name}`
+
+Revoke a consumer's registration for a ruleset. The registration record is soft-deleted (status set to `"revoked"`).
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `consumer_id` | string | The consumer's business identifier |
+| `ruleset_name` | string | Name of the ruleset to revoke |
+
+**Response `204`**
+
+**Response `404`** — Consumer or registration not found.
+
+---
+
+### Execution History
+
+Query persisted rule execution logs. Useful for auditing, debugging, and analytics.
+
+#### `GET /api/v1/executions`
+
+List execution log rows with optional filters and pagination.
+
+**Query Parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `consumer_id` | string | — | Filter by consumer business identifier |
+| `ruleset_id` | integer | — | Filter by ruleset primary key |
+| `from` | string (ISO 8601) | — | Inclusive start timestamp (e.g. `2026-01-01T00:00:00Z`) |
+| `to` | string (ISO 8601) | — | Exclusive end timestamp |
+| `limit` | integer | `100` | Max results to return (1–500) |
+| `offset` | integer | `0` | Pagination offset |
+| `include_payload` | boolean | `false` | Include `input_data` and `output_data` fields (may contain sensitive data) |
+
+**Response `200`**
+
+```json
+{
+  "executions": [
+    {
+      "id": 42,
+      "execution_id": "exec-uuid-abc",
+      "correlation_id": null,
+      "ruleset_id": 5,
+      "consumer_id": "client-abc",
+      "total_points": 85.0,
+      "pattern_result": "YYN",
+      "execution_time_ms": 12.5,
+      "success": true,
+      "error_message": null,
+      "timestamp": "2026-04-01T10:00:00Z",
+      "input_data": null,
+      "output_data": null
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `executions` | array | Matching execution records |
+| `total` | integer | Total rows matching filters (before limit/offset) |
+| `limit` | integer | Applied limit |
+| `offset` | integer | Applied offset |
+
+**`ExecutionLogSummaryResponse` fields**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | integer | Database primary key |
+| `execution_id` | string | Unique execution identifier |
+| `correlation_id` | string \| null | Request correlation ID (not stored on execution record) |
+| `ruleset_id` | integer \| null | Ruleset primary key |
+| `consumer_id` | string \| null | Consumer business identifier |
+| `total_points` | float \| null | Aggregate score from rule evaluation |
+| `pattern_result` | string \| null | Concatenated action results (e.g. `"YYN"`) |
+| `execution_time_ms` | float | Duration of rule evaluation in milliseconds |
+| `success` | boolean | Whether the execution completed without error |
+| `error_message` | string \| null | Error message if `success` is `false` |
+| `timestamp` | string \| null | ISO 8601 timestamp when the execution was recorded |
+| `input_data` | object \| null | Input payload (only when `include_payload=true`) |
+| `output_data` | object \| null | Output payload (only when `include_payload=true`) |
+
+**Example**
+
+```bash
+curl "http://localhost:8000/api/v1/executions?consumer_id=client-abc&from=2026-04-01T00:00:00Z&limit=50"
+```
+
+**Example with payload**
+
+```bash
+curl "http://localhost:8000/api/v1/executions?consumer_id=client-abc&include_payload=true&limit=10"
+```
 
 ---
 
@@ -1637,6 +1863,51 @@ Returned per-rule in dry-run responses.
   stages: Array<{ name: string; position: number }>;
   created_at: string;
   updated_at: string;
+}
+```
+
+### `ConsumerRulesetRegistrationResponse`
+
+```typescript
+{
+  id: number;                  // Registration primary key
+  consumer_id: string;         // Consumer business identifier
+  ruleset_id: number;          // Ruleset primary key
+  ruleset_name?: string;       // Ruleset name when available
+  status: string;              // "active" | "revoked"
+  created_at?: string;
+  updated_at?: string;
+}
+```
+
+### `ExecutionLogSummaryResponse`
+
+```typescript
+{
+  id: number;
+  execution_id: string;
+  correlation_id?: string;     // Not stored on execution record; reserved
+  ruleset_id?: number;
+  consumer_id?: string;
+  total_points?: number;
+  pattern_result?: string;
+  execution_time_ms: number;
+  success: boolean;
+  error_message?: string;
+  timestamp?: string;
+  input_data?: Record<string, any>;   // Present when include_payload=true
+  output_data?: Record<string, any>;  // Present when include_payload=true
+}
+```
+
+### `ExecutionLogsListResponse`
+
+```typescript
+{
+  executions: ExecutionLogSummaryResponse[];
+  total: number;    // Total matching rows before limit/offset
+  limit: number;
+  offset: number;
 }
 ```
 
