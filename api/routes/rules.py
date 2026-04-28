@@ -11,7 +11,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 
-from api.deps import get_consumer_ruleset_registration_service_dep, get_correlation_id
+from api.deps import (
+    get_consumer_ruleset_registration_service_dep,
+    get_correlation_id,
+    get_rule_management_service_dep,
+)
 from api.middleware.auth import get_api_key
 from api.models import (
     BatchItemResult,
@@ -20,12 +24,14 @@ from api.models import (
     DMNRuleExecutionRequest,
     ErrorResponse,
     RuleEvaluationResult,
+    RuleIdsExecutionRequest,
     RuleExecutionRequest,
     RuleExecutionResponse,
 )
-from common.exceptions import DataValidationError
+from common.exceptions import DataValidationError, NotFoundError
 from common.logger import get_logger
 from services.consumer_ruleset_registration import ConsumerRulesetRegistrationService
+from services.rule_management import RuleManagementService
 from services.ruleengine_exec import (
     dmn_rules_exec,
     rules_exec,
@@ -103,6 +109,22 @@ def _rule_execution_response_from_result(
     )
 
 
+def _normalize_rule_for_inline_execution(rule: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize a DB-backed rule into an inline execution rule shape.
+
+    The execution engine accepts the same payload as configured rules and is tolerant
+    of a few legacy aliases. We normalize common keys so callers can execute rules
+    fetched via the management API.
+    """
+    normalized = dict(rule)
+    if "rule_name" not in normalized and "rulename" in normalized:
+        normalized["rule_name"] = normalized.get("rulename")
+    if "rule_point" not in normalized and "rulepoint" in normalized:
+        normalized["rule_point"] = normalized.get("rulepoint")
+    return normalized
+
+
 @router.post(
     "/execute",
     response_model=RuleExecutionResponse,
@@ -141,6 +163,71 @@ async def execute_rules(
     )
     logger.info(
         "API rule execution completed",
+        correlation_id=correlation_id,
+        total_points=response.total_points,
+        pattern_result=response.pattern_result,
+        execution_time_ms=execution_time_ms,
+    )
+    return response
+
+
+@router.post(
+    "/execute-by-ids",
+    response_model=RuleExecutionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Execute a specific list of rule IDs against input data",
+    description=(
+        "Fetch each rule definition by rule_id via the management service and execute "
+        "exactly that subset against the provided input data. This is a convenience "
+        "wrapper around the existing rule execution engine."
+    ),
+)
+async def execute_rules_by_ids(
+    request: RuleIdsExecutionRequest,
+    correlation_id: Optional[str] = Depends(get_correlation_id),
+    api_key: Optional[str] = Depends(get_api_key),
+    rule_service: RuleManagementService = Depends(get_rule_management_service_dep),
+) -> RuleExecutionResponse:
+    start_time = time.time()
+    correlation_id = _effective_correlation_id(correlation_id, request.correlation_id)
+
+    logger.info(
+        "API rule_id subset execution request",
+        correlation_id=correlation_id,
+        rule_ids=request.rule_ids,
+        dry_run=request.dry_run,
+        data_keys=list(request.data.keys()),
+    )
+
+    inline_rules: List[Dict[str, Any]] = []
+    for rid in request.rule_ids:
+        rule_data = rule_service.get_rule(rid)
+        if not rule_data:
+            logger.warning(
+                "Rule not found for execute-by-ids",
+                correlation_id=correlation_id,
+                rule_id=rid,
+            )
+            raise NotFoundError(
+                f"Rule with ID '{rid}' not found",
+                error_code="RULE_NOT_FOUND",
+                context={"rule_id": rid},
+            )
+        inline_rules.append(_normalize_rule_for_inline_execution(rule_data))
+
+    result = rules_exec(
+        data=request.data,
+        dry_run=request.dry_run,
+        correlation_id=correlation_id,
+        consumer_id=request.consumer_id,
+        rules=inline_rules,
+    )
+    execution_time_ms = (time.time() - start_time) * 1000
+    response = _rule_execution_response_from_result(
+        result, request.dry_run, execution_time_ms, correlation_id
+    )
+    logger.info(
+        "API rule_id subset execution completed",
         correlation_id=correlation_id,
         total_points=response.total_points,
         pattern_result=response.pattern_result,

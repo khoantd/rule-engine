@@ -37,11 +37,22 @@ class RuleExecutionRequest(BaseModel):
     @field_validator("rules")
     @classmethod
     def validate_rules(cls, v: Optional[List[Any]]) -> Optional[List[Any]]:
-        """When provided, must be a list (empty list runs no rules)."""
+        """When provided, must be a list of rule objects (empty list runs no rules)."""
         if v is None:
             return v
         if not isinstance(v, list):
             raise ValueError("rules must be a list of rule objects when provided")
+        for i, rule in enumerate(v):
+            if not isinstance(rule, dict):
+                raise ValueError(f"rules[{i}] must be an object (dict)")
+            if not (rule.get("rule_name") or rule.get("rulename")):
+                raise ValueError(
+                    f"rules[{i}] must include 'rule_name' or 'rulename' (DB IDs are not supported here)"
+                )
+            if not rule.get("type"):
+                raise ValueError(f"rules[{i}] must include 'type' (simple|complex)")
+            if not isinstance(rule.get("conditions"), dict):
+                raise ValueError(f"rules[{i}] must include 'conditions' as an object")
         return v
 
     model_config = ConfigDict(
@@ -82,6 +93,42 @@ class RuleExecutionRequest(BaseModel):
             }
         }
     )
+
+
+class RuleIdsExecutionRequest(BaseModel):
+    """Request model for executing a subset of rules by rule_id."""
+
+    rule_ids: List[str] = Field(..., description="Ordered list of rule IDs to execute")
+    data: Dict[str, Any] = Field(..., description="Input data for rule evaluation")
+    dry_run: bool = Field(default=False, description="Execute rules without side effects")
+    correlation_id: Optional[str] = Field(default=None, description="Correlation ID for tracing")
+    consumer_id: Optional[str] = Field(default=None, description="Consumer ID for usage tracking")
+
+    @field_validator("rule_ids")
+    @classmethod
+    def validate_rule_ids(cls, v: Any) -> Any:
+        if not isinstance(v, list) or len(v) == 0:
+            raise ValueError("rule_ids must be a non-empty list")
+        out: List[str] = []
+        seen = set()
+        for i, rid in enumerate(v):
+            if not isinstance(rid, str) or not rid.strip():
+                raise ValueError(f"rule_ids[{i}] must be a non-empty string")
+            s = rid.strip()
+            if s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+        if len(out) == 0:
+            raise ValueError("rule_ids must contain at least one unique id")
+        return out
+
+    @field_validator("data")
+    @classmethod
+    def validate_data_is_dict(cls, v: Any) -> Any:
+        if not isinstance(v, dict):
+            raise ValueError("data must be a dictionary")
+        return v
 
 
 class RuleEvaluationResult(BaseModel):
@@ -160,6 +207,17 @@ class BatchRuleExecutionRequest(BaseModel):
             return v
         if not isinstance(v, list):
             raise ValueError("rules must be a list of rule objects when provided")
+        for i, rule in enumerate(v):
+            if not isinstance(rule, dict):
+                raise ValueError(f"rules[{i}] must be an object (dict)")
+            if not (rule.get("rule_name") or rule.get("rulename")):
+                raise ValueError(
+                    f"rules[{i}] must include 'rule_name' or 'rulename' (DB IDs are not supported here)"
+                )
+            if not rule.get("type"):
+                raise ValueError(f"rules[{i}] must include 'type' (simple|complex)")
+            if not isinstance(rule.get("conditions"), dict):
+                raise ValueError(f"rules[{i}] must include 'conditions' as an object")
         return v
 
     @field_validator("data_list")

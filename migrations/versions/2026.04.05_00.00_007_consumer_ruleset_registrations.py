@@ -53,6 +53,15 @@ def _index_exists(bind, index_name: str) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
 
+    # Default Alembic creates version_num as VARCHAR(32). This revision id is 34 characters,
+    # so stamping the DB fails with "value too long for type character varying(32)" unless widened.
+    if _table_exists(bind, "alembic_version"):
+        op.execute(
+            sa.text(
+                "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255)"
+            )
+        )
+
     if not _table_exists(bind, "consumer_ruleset_registrations"):
         op.create_table(
             "consumer_ruleset_registrations",

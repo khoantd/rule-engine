@@ -142,6 +142,76 @@
 					"response": []
 				},
 				{
+					"name": "Execute Rules (Inline Subset Override - Single Rule)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data\": {\n    \"issue\": 35,\n    \"title\": \"Superman\",\n    \"publisher\": \"DC\"\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-inline-001\",\n  \"consumer_id\": null,\n  \"rules\": [\n    {\n      \"id\": \"{{rule_id}}\",\n      \"rule_name\": \"(paste rule_name from GET /management/rules/{{rule_id}})\",\n      \"type\": \"simple\",\n      \"conditions\": {\"item\": \"C0001\"},\n      \"description\": \"(paste from management rule)\",\n      \"rule_point\": 10.0,\n      \"weight\": 1.0,\n      \"priority\": 1,\n      \"action_result\": \"Y\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute"
+							]
+						},
+						"description": "Execute ONLY a specific rule by providing it inline via the `rules` array override (works even when USE_DATABASE=true). Tip: first call GET /api/v1/management/rules/{{rule_id}} and paste the returned rule JSON into rules[0]. Run with dry_run=true to confirm `rule_evaluations` includes only this rule."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute Rules (Inline Subset Override - Multiple Rules)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"data\": {\n    \"amount\": 150,\n    \"country\": \"US\"\n  },\n  \"dry_run\": true,\n  \"correlation_id\": \"req-inline-multi-001\",\n  \"consumer_id\": null,\n  \"rules\": [\n    {\n      \"id\": \"R-inline-1\",\n      \"rule_name\": \"amount_gt_100\",\n      \"type\": \"complex\",\n      \"priority\": 1,\n      \"conditions\": {\n        \"items\": [\n          {\"attribute\": \"amount\", \"equation\": \"greater_than\", \"constant\": \"100\"}\n        ],\n        \"mode\": \"and\"\n      },\n      \"description\": \"amount > 100\",\n      \"rule_point\": 10.0,\n      \"weight\": 1.0,\n      \"action_result\": \"Y\"\n    },\n    {\n      \"id\": \"R-inline-2\",\n      \"rule_name\": \"country_is_ca\",\n      \"type\": \"complex\",\n      \"priority\": 2,\n      \"conditions\": {\n        \"items\": [\n          {\"attribute\": \"country\", \"equation\": \"equal\", \"constant\": \"CA\"}\n        ],\n        \"mode\": \"and\"\n      },\n      \"description\": \"country == CA\",\n      \"rule_point\": 5.0,\n      \"weight\": 1.0,\n      \"action_result\": \"N\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute"
+							]
+						},
+						"description": "Execute ONLY a specific subset of rules by providing them inline via the `rules` array override. Use dry_run=true to confirm `rule_evaluations` length equals the number of rules you sent, and to see `would_match`/`would_not_match` per rule."
+					},
+					"response": []
+				},
+				{
 					"name": "Execute Ruleset",
 					"request": {
 						"method": "POST",
@@ -210,6 +280,41 @@
 							]
 						},
 						"description": "Execute a specific ruleset in dry run mode to preview detailed per-rule evaluations without side effects."
+					},
+					"response": []
+				},
+				{
+					"name": "Execute Rules (By Rule IDs)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"rule_ids\": [\"rcqwh4h\"],\n  \"data\": {\"zalo_id\": \"6819500480936506144\"},\n  \"dry_run\": false,\n  \"correlation_id\": \"req-by-ids-001\",\n  \"consumer_id\": null\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/rules/execute-by-ids",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"rules",
+								"execute-by-ids"
+							]
+						},
+						"description": "Execute a subset of rules by their DB rule_ids. The server fetches each rule definition from /api/v1/management/rules/{rule_id}, then executes them with the same engine as /api/v1/rules/execute using inline rules."
 					},
 					"response": []
 				},
@@ -896,7 +1001,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/v1/management/rules/R0001",
+							"raw": "{{base_url}}/api/v1/management/rules/{{rule_id}}",
 							"host": [
 								"{{base_url}}"
 							],
@@ -905,7 +1010,7 @@
 								"v1",
 								"management",
 								"rules",
-								"R0001"
+								"{{rule_id}}"
 							]
 						},
 						"description": "Retrieve a specific rule by its identifier."

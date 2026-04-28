@@ -530,6 +530,32 @@ curl -X POST http://localhost:8000/api/v1/rules/batch \
 
 ---
 
+### Execute Specific Rule IDs
+
+#### `POST /api/v1/rules/execute-by-ids`
+
+Execute a specific subset of rules identified by **rule IDs** stored in the management database.
+The server fetches the rule definitions and executes them using the same engine path as inline
+`rules` on `POST /api/v1/rules/execute`.
+
+**Request Body**
+
+```json
+{
+  "rule_ids": ["rcqwh4h"],
+  "data": {"zalo_id": "6819500480936506144"},
+  "dry_run": false,
+  "correlation_id": "req-by-ids-001",
+  "consumer_id": null
+}
+```
+
+**Response `200`** — Same shape as `RuleExecutionResponse`.
+
+> If a `rule_id` is not found, the API responds with `404` and `error_code: "RULE_NOT_FOUND"`.
+
+---
+
 ### DMN Rule Execution
 
 DMN (Decision Model Notation) endpoints allow executing rules defined in an external DMN XML file rather than the server's configured ruleset.
